@@ -11,12 +11,9 @@ export default function SetupProfile() {
   const [loading, setLoading] = useState(false)
   const [checkingProfile, setCheckingProfile] = useState(true)
 
-  // Data diri
   const [fullName, setFullName] = useState('')
   const [school, setSchool] = useState('')
   const [graduationYear, setGraduationYear] = useState('2026')
-  
-  // Target passing grade (700 or 712)
   const [targetPassingGrade, setTargetPassingGrade] = useState(null)
 
   useEffect(function() {
@@ -35,7 +32,6 @@ export default function SetupProfile() {
       .single()
 
     if (data && data.target_passing_grade) {
-      // Profil sudah ada, redirect ke pretest atau home
       if (data.pretest_completed) {
         router.push('/')
       } else {
@@ -80,7 +76,7 @@ export default function SetupProfile() {
     }
 
     setLoading(false)
-    router.push('/pretest') // Langsung ke pretest setelah setup
+    router.push('/pretest')
   }
 
   if (!user || checkingProfile) {
@@ -95,7 +91,6 @@ export default function SetupProfile() {
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-8">
 
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="text-5xl mb-3">🎓</div>
           <h1 className="text-3xl font-bold text-gray-800">Setup Profil</h1>
@@ -104,7 +99,6 @@ export default function SetupProfile() {
 
         <div className="space-y-6">
           
-          {/* Data Diri */}
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-gray-800 mb-4">📝 Data Diri</h2>
             
@@ -150,7 +144,6 @@ export default function SetupProfile() {
             </div>
           </div>
 
-          {/* Target Passing Grade */}
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-gray-800 mb-2">🎯 Pilih Target</h2>
             <p className="text-sm text-gray-600 mb-4">
@@ -159,7 +152,6 @@ export default function SetupProfile() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
-              {/* Target 700 */}
               <button
                 onClick={function() { setTargetPassingGrade(700) }}
                 className={
@@ -194,7 +186,6 @@ export default function SetupProfile() {
                 </div>
               </button>
 
-              {/* Target 712 */}
               <button
                 onClick={function() { setTargetPassingGrade(712) }}
                 className={
@@ -232,7 +223,6 @@ export default function SetupProfile() {
             </div>
           </div>
 
-          {/* Info Box */}
           {targetPassingGrade && (
             <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
               <p className="text-green-800 text-sm font-medium flex items-center gap-2">
@@ -245,7 +235,6 @@ export default function SetupProfile() {
             </div>
           )}
 
-          {/* Submit Button */}
           <button
             onClick={handleSubmit}
             disabled={loading || !targetPassingGrade}
