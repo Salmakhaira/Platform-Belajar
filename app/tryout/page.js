@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useAuth } from '@/components/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -7,7 +7,7 @@ import Navbar from '@/components/Navbar'
 import Timer from '@/components/Timer'
 import { ChevronLeft, ChevronRight, Send } from 'lucide-react'
 
-export default function Tryout() {
+function TryoutContent() {
   const { user } = useAuth()
   const router = useRouter()
   
@@ -44,13 +44,14 @@ export default function Tryout() {
   const startTryout = async () => {
     setLoading(true)
     
-    // Ambil soal non-pretest, ~60 soal (9 per submateri × 7 = 63)
+    // Ambil soal tryout (is_tryout = true)
     const { data: questionsData, error } = await supabase
       .from('questions')
       .select('*')
+      .eq('is_tryout', true)
       .eq('is_pretest', false)
       .order('id')
-      .limit(63)
+      .limit(60)
 
     if (error) {
       alert('Error loading questions: ' + error.message)
@@ -122,13 +123,21 @@ export default function Tryout() {
     setIsActive(false)
     setLoading(true)
 
+    // Calculate score
+    const totalQuestions = questions.length
+    const correctCount = questions.filter(q => 
+      answers[q.id]?.answer === q.correct_answer
+    ).length
+    const finalScore = Math.round((correctCount / totalQuestions) * 100)
+
     // Update session
     await supabase
       .from('sessions')
       .update({
         end_time: new Date().toISOString(),
         is_completed: true,
-        auto_submitted: autoSubmit
+        auto_submitted: autoSubmit,
+        final_score: finalScore
       })
       .eq('id', sessionId)
 
@@ -143,22 +152,36 @@ export default function Tryout() {
 
     await supabase.from('user_answers').insert(answersToInsert)
 
-    // Get current tryout number
-    const { data: currentSession } = await supabase
-      .from('sessions')
-      .select('tryout_number')
-      .eq('id', sessionId)
+    // Get user's target passing grade
+    const { data: profile } = await supabase
+      .from('student_profiles')
+      .select('target_passing_grade')
+      .eq('user_id', user.id)
       .single()
 
-    const tryoutNumber = currentSession?.tryout_number || 1
+    const targetPassingGrade = profile?.target_passing_grade || 700
+
+    // Check if needs drilling
+    const needsDrilling = finalScore < targetPassingGrade
+
+    // Update profile with current score & drilling status
+    await supabase
+      .from('student_profiles')
+      .update({
+        current_score: finalScore,
+        needs_drilling: needsDrilling
+      })
+      .eq('user_id', user.id)
 
     setLoading(false)
 
-    // Cek apakah perlu whole analysis (setiap kelipatan 3)
-    if (tryoutNumber % 3 === 0) {
-      router.push(`/analysis?tryout=${tryoutNumber}`)
+    // Redirect based on result
+    if (needsDrilling) {
+      // Score below target → Go to drilling
+      router.push(`/drilling?session=${sessionId}&score=${finalScore}&target=${targetPassingGrade}`)
     } else {
-      router.push(`/review/${sessionId}`)
+      // Score meets or exceeds target → Success!
+      router.push(`/success?score=${finalScore}&target=${targetPassingGrade}`)
     }
   }
 
@@ -180,11 +203,11 @@ export default function Tryout() {
               <h3 className="font-bold mb-4 text-lg">📋 Detail Tryout:</h3>
               <ul className="space-y-2 text-gray-700">
                 <li>⏱️ Durasi: <strong>120 menit (2 jam)</strong></li>
-                <li>📝 Jumlah soal: <strong>~60 soal</strong></li>
+                <li>📝 Jumlah soal: <strong>60 soal</strong></li>
                 <li>📚 Materi: <strong>Semua submateri (PU, PPU, PBM, PK, LBI, LBE, PM)</strong></li>
                 <li>🚫 Tidak bisa pause atau keluar setelah mulai</li>
                 <li>✅ Auto-submit saat waktu habis</li>
-                <li>📊 Whole Analysis otomatis setiap tryout ke-3, 6, 9...</li>
+                <li>🎯 Drilling otomatis jika belum capai passing grade</li>
               </ul>
             </div>
 
@@ -317,5 +340,17 @@ export default function Tryout() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function Tryout() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-600"></div>
+      </div>
+    }>
+      <TryoutContent />
+    </Suspense>
   )
 }
