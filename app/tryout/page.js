@@ -44,7 +44,6 @@ function TryoutContent() {
   const startTryout = async () => {
     setLoading(true)
     
-    // Ambil soal tryout (is_tryout = true)
     const { data: questionsData, error } = await supabase
       .from('questions')
       .select('*')
@@ -65,7 +64,6 @@ function TryoutContent() {
       return
     }
 
-    // Dapatkan tryout number berikutnya
     const { data: tryoutNum, error: rpcError } = await supabase
       .rpc('get_next_tryout_number', { p_user_id: user.id })
 
@@ -73,7 +71,6 @@ function TryoutContent() {
       console.error('Error getting tryout number:', rpcError)
     }
 
-    // Create session
     const { data: session, error: sessionError } = await supabase
       .from('sessions')
       .insert({
@@ -123,14 +120,12 @@ function TryoutContent() {
     setIsActive(false)
     setLoading(true)
 
-    // Calculate score
     const totalQuestions = questions.length
     const correctCount = questions.filter(q => 
       answers[q.id]?.answer === q.correct_answer
     ).length
     const finalScore = Math.round((correctCount / totalQuestions) * 100)
 
-    // Update session
     await supabase
       .from('sessions')
       .update({
@@ -141,7 +136,6 @@ function TryoutContent() {
       })
       .eq('id', sessionId)
 
-    // Insert answers
     const answersToInsert = questions.map(q => ({
       session_id: sessionId,
       question_id: q.id,
@@ -152,7 +146,6 @@ function TryoutContent() {
 
     await supabase.from('user_answers').insert(answersToInsert)
 
-    // Get user's target passing grade
     const { data: profile } = await supabase
       .from('student_profiles')
       .select('target_passing_grade')
@@ -160,11 +153,8 @@ function TryoutContent() {
       .single()
 
     const targetPassingGrade = profile?.target_passing_grade || 700
-
-    // Check if needs drilling
     const needsDrilling = finalScore < targetPassingGrade
 
-    // Update profile with current score & drilling status
     await supabase
       .from('student_profiles')
       .update({
@@ -175,13 +165,10 @@ function TryoutContent() {
 
     setLoading(false)
 
-    // Redirect based on result
     if (needsDrilling) {
-      // Score below target → Go to drilling
-      router.push(`/drilling?session=${sessionId}&score=${finalScore}&target=${targetPassingGrade}`)
+      router.push(`/drilling?session=${sessionId}`)
     } else {
-      // Score meets or exceeds target → Success!
-      router.push(`/success?score=${finalScore}&target=${targetPassingGrade}`)
+      router.push(`/review/${sessionId}`)
     }
   }
 
