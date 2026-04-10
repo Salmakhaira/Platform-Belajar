@@ -8,24 +8,16 @@ export default function SetupProfile() {
   const { user } = useAuth()
   const router = useRouter()
 
-  const [step, setStep] = useState(1) // 1: data diri, 2: pilih jurusan
   const [loading, setLoading] = useState(false)
   const [checkingProfile, setCheckingProfile] = useState(true)
 
-  // Step 1: Data diri
+  // Data diri
   const [fullName, setFullName] = useState('')
   const [school, setSchool] = useState('')
   const [graduationYear, setGraduationYear] = useState('2026')
-
-  // Step 2: Pilih jurusan
-  const [universities, setUniversities] = useState([])
-  const [majors, setMajors] = useState([])
-  const [choice1, setChoice1] = useState({ university: '', major: '' })
-  const [choice2, setChoice2] = useState({ university: '', major: '' })
-  const [choice3, setChoice3] = useState({ university: '', major: '' })
-  const [majors1, setMajors1] = useState([])
-  const [majors2, setMajors2] = useState([])
-  const [majors3, setMajors3] = useState([])
+  
+  // Target passing grade (700 or 712)
+  const [targetPassingGrade, setTargetPassingGrade] = useState(null)
 
   useEffect(function() {
     if (!user) {
@@ -33,7 +25,6 @@ export default function SetupProfile() {
       return
     }
     checkExistingProfile()
-    fetchUniversities()
   }, [user])
 
   async function checkExistingProfile() {
@@ -43,52 +34,26 @@ export default function SetupProfile() {
       .eq('user_id', user.id)
       .single()
 
-    if (data && data.choice_1_major_id) {
-      // Profil sudah ada, redirect ke dashboard
-      router.push('/')
+    if (data && data.target_passing_grade) {
+      // Profil sudah ada, redirect ke pretest atau home
+      if (data.pretest_completed) {
+        router.push('/')
+      } else {
+        router.push('/pretest')
+      }
       return
     }
     setCheckingProfile(false)
   }
 
-  async function fetchUniversities() {
-    const { data } = await supabase
-      .from('universities')
-      .select('*')
-      .order('name')
-    setUniversities(data || [])
-  }
-
-  async function fetchMajors(universityId, choiceNum) {
-    const { data } = await supabase
-      .from('majors')
-      .select('*')
-      .eq('university_id', universityId)
-      .order('name')
-
-    if (choiceNum === 1) setMajors1(data || [])
-    if (choiceNum === 2) setMajors2(data || [])
-    if (choiceNum === 3) setMajors3(data || [])
-  }
-
-  function handleUniversityChange(value, choiceNum) {
-    if (choiceNum === 1) {
-      setChoice1({ university: value, major: '' })
-      fetchMajors(value, 1)
-    }
-    if (choiceNum === 2) {
-      setChoice2({ university: value, major: '' })
-      fetchMajors(value, 2)
-    }
-    if (choiceNum === 3) {
-      setChoice3({ university: value, major: '' })
-      fetchMajors(value, 3)
-    }
-  }
-
   async function handleSubmit() {
-    if (!choice1.major) {
-      alert('Pilihan 1 wajib diisi!')
+    if (!fullName || !school) {
+      alert('Nama dan sekolah wajib diisi!')
+      return
+    }
+
+    if (!targetPassingGrade) {
+      alert('Pilih target passing grade!')
       return
     }
 
@@ -101,9 +66,10 @@ export default function SetupProfile() {
         full_name: fullName,
         school: school,
         graduation_year: parseInt(graduationYear),
-        choice_1_major_id: choice1.major || null,
-        choice_2_major_id: choice2.major || null,
-        choice_3_major_id: choice3.major || null,
+        target_passing_grade: targetPassingGrade,
+        current_score: 0,
+        needs_drilling: false,
+        pretest_completed: false,
         updated_at: new Date().toISOString()
       })
 
@@ -126,36 +92,22 @@ export default function SetupProfile() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-600 to-purple-700 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-8">
 
         {/* Header */}
         <div className="text-center mb-8">
           <div className="text-5xl mb-3">🎓</div>
-          <h1 className="text-3xl font-bold text-gray-800">AIRoadToPTN</h1>
-          <p className="text-gray-500 mt-2">Setup profil untuk memulai perjalananmu</p>
+          <h1 className="text-3xl font-bold text-gray-800">Setup Profil</h1>
+          <p className="text-gray-500 mt-2">Mulai perjalanan menuju PTN impianmu</p>
         </div>
 
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center gap-4 mb-8">
-          <div className={'flex items-center gap-2 ' + (step >= 1 ? 'text-blue-600' : 'text-gray-400')}>
-            <div className={'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ' + (step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200')}>
-              1
-            </div>
-            <span className="text-sm font-medium">Data Diri</span>
-          </div>
-          <div className={'w-16 h-1 rounded ' + (step >= 2 ? 'bg-blue-600' : 'bg-gray-200')}></div>
-          <div className={'flex items-center gap-2 ' + (step >= 2 ? 'text-blue-600' : 'text-gray-400')}>
-            <div className={'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ' + (step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200')}>
-              2
-            </div>
-            <span className="text-sm font-medium">Pilih Jurusan</span>
-          </div>
-        </div>
-
-        {/* STEP 1: Data Diri */}
-        {step === 1 && (
-          <div className="space-y-5">
+        <div className="space-y-6">
+          
+          {/* Data Diri */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">📝 Data Diri</h2>
+            
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Nama Lengkap <span className="text-red-500">*</span>
@@ -196,137 +148,114 @@ export default function SetupProfile() {
                 <option value="2027">2027</option>
               </select>
             </div>
-
-            <button
-              onClick={function() {
-                if (!fullName || !school) {
-                  alert('Nama dan sekolah wajib diisi!')
-                  return
-                }
-                setStep(2)
-              }}
-              className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-all"
-            >
-              Lanjut →
-            </button>
           </div>
-        )}
 
-        {/* STEP 2: Pilih Jurusan */}
-        {step === 2 && (
-          <div className="space-y-6">
-            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-              <p className="text-blue-800 text-sm font-medium">
-                💡 Pilih maksimal 3 jurusan yang kamu inginkan. Pilihan 1 wajib diisi.
+          {/* Target Passing Grade */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-gray-800 mb-2">🎯 Pilih Target</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Pilih passing grade PTN/Jurusan yang kamu targetkan
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Target 700 */}
+              <button
+                onClick={function() { setTargetPassingGrade(700) }}
+                className={
+                  'border-2 rounded-xl p-6 text-left transition-all hover:shadow-lg ' +
+                  (targetPassingGrade === 700 
+                    ? 'border-blue-600 bg-blue-50' 
+                    : 'border-gray-200 hover:border-blue-300')
+                }
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-bold text-lg text-gray-800">Target 1</h3>
+                    <p className="text-xs text-gray-500 mt-1">PTN/Jurusan Pilihan Pertama</p>
+                  </div>
+                  {targetPassingGrade === 700 && (
+                    <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-blue-600">700</span>
+                    <span className="text-gray-500 text-sm">Passing Grade</span>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    Kamu akan latihan hingga mencapai atau melewati score ini
+                  </p>
+                </div>
+              </button>
+
+              {/* Target 712 */}
+              <button
+                onClick={function() { setTargetPassingGrade(712) }}
+                className={
+                  'border-2 rounded-xl p-6 text-left transition-all hover:shadow-lg ' +
+                  (targetPassingGrade === 712 
+                    ? 'border-purple-600 bg-purple-50' 
+                    : 'border-gray-200 hover:border-purple-300')
+                }
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-bold text-lg text-gray-800">Target 2</h3>
+                    <p className="text-xs text-gray-500 mt-1">PTN/Jurusan Alternatif</p>
+                  </div>
+                  {targetPassingGrade === 712 && (
+                    <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-purple-600">712</span>
+                    <span className="text-gray-500 text-sm">Passing Grade</span>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    Target lebih tinggi untuk challenge diri sendiri
+                  </p>
+                </div>
+              </button>
+
+            </div>
+          </div>
+
+          {/* Info Box */}
+          {targetPassingGrade && (
+            <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
+              <p className="text-green-800 text-sm font-medium flex items-center gap-2">
+                <span>✅</span>
+                <span>
+                  Target dipilih: <strong>{targetPassingGrade}</strong> — 
+                  Sistem akan guide kamu dengan drilling soal hingga mencapai target ini!
+                </span>
               </p>
             </div>
+          )}
 
-            {/* Pilihan 1 */}
-            <ChoiceInput
-              label="Pilihan 1"
-              required={true}
-              badge="bg-blue-600"
-              universities={universities}
-              majors={majors1}
-              choice={choice1}
-              onUniversityChange={function(v) { handleUniversityChange(v, 1) }}
-              onMajorChange={function(v) { setChoice1({ ...choice1, major: v }) }}
-              majorList={majors1}
-            />
-
-            {/* Pilihan 2 */}
-            <ChoiceInput
-              label="Pilihan 2"
-              required={false}
-              badge="bg-purple-500"
-              universities={universities}
-              majors={majors2}
-              choice={choice2}
-              onUniversityChange={function(v) { handleUniversityChange(v, 2) }}
-              onMajorChange={function(v) { setChoice2({ ...choice2, major: v }) }}
-              majorList={majors2}
-            />
-
-            {/* Pilihan 3 */}
-            <ChoiceInput
-              label="Pilihan 3"
-              required={false}
-              badge="bg-green-500"
-              universities={universities}
-              majors={majors3}
-              choice={choice3}
-              onUniversityChange={function(v) { handleUniversityChange(v, 3) }}
-              onMajorChange={function(v) { setChoice3({ ...choice3, major: v }) }}
-              majorList={majors3}
-            />
-
-            <div className="flex gap-3">
-              <button
-                onClick={function() { setStep(1) }}
-                className="flex-1 border-2 border-gray-300 text-gray-700 py-4 rounded-xl font-bold hover:bg-gray-50 transition-all"
-              >
-                ← Kembali
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="flex-2 bg-blue-600 text-white py-4 px-8 rounded-xl font-bold text-lg hover:bg-blue-700 disabled:opacity-50 transition-all"
-              >
-                {loading ? 'Menyimpan...' : 'Mulai Pretest! 🚀'}
-              </button>
-            </div>
-          </div>
-        )}
-
-      </div>
-    </div>
-  )
-}
-
-function ChoiceInput(props) {
-  const majorList = props.majorList || []
-
-  return (
-    <div className="border-2 border-gray-100 rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className={'text-white text-xs font-bold px-3 py-1 rounded-full ' + props.badge}>
-          {props.label}
-        </span>
-        {props.required ? (
-          <span className="text-red-500 text-xs">* Wajib</span>
-        ) : (
-          <span className="text-gray-400 text-xs">Opsional</span>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        <select
-          value={props.choice.university}
-          onChange={function(e) { props.onUniversityChange(e.target.value) }}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 outline-none"
-        >
-          <option value="">-- Pilih Universitas --</option>
-          {props.universities.map(function(u) {
-            return <option key={u.id} value={u.id}>{u.name} ({u.short_name})</option>
-          })}
-        </select>
-
-        {props.choice.university && (
-          <select
-            value={props.choice.major}
-            onChange={function(e) { props.onMajorChange(e.target.value) }}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 outline-none"
+          {/* Submit Button */}
+          <button
+            onClick={handleSubmit}
+            disabled={loading || !targetPassingGrade}
+            className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            <option value="">-- Pilih Jurusan --</option>
-            {majorList.map(function(m) {
-              return (
-                <option key={m.id} value={m.id}>
-                  {m.name} - PG: {m.passing_grade}%
-                </option>
-              )
-            })}
-          </select>
-        )}
+            {loading ? 'Menyimpan...' : 'Mulai Pretest! 🚀'}
+          </button>
+
+        </div>
+
       </div>
     </div>
   )
