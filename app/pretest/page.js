@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { BookOpen } from 'lucide-react'
 
 const SUBMATERI_NAMES = {
   PU: 'Penalaran Umum',
@@ -25,12 +26,12 @@ export default function Pretest() {
   const { user } = useAuth()
   const router = useRouter()
 
-  const [phase, setPhase] = useState('intro') // intro, test, result
+  const [phase, setPhase] = useState('intro')
   const [questions, setQuestions] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState({})
   const [loading, setLoading] = useState(false)
-  const [timeLeft, setTimeLeft] = useState(90 * 60) // 90 menit
+  const [timeLeft, setTimeLeft] = useState(50 * 60) // 50 menit
   const [timerActive, setTimerActive] = useState(false)
   const [result, setResult] = useState(null)
 
@@ -42,7 +43,6 @@ export default function Pretest() {
     checkAlreadyDone()
   }, [user])
 
-  // Timer countdown
   useEffect(function() {
     if (!timerActive) return
     if (timeLeft <= 0) {
@@ -58,12 +58,11 @@ export default function Pretest() {
   async function checkAlreadyDone() {
     const { data } = await supabase
       .from('student_profiles')
-      .select('pretest_completed, pretest_score, level')
+      .select('pretest_completed')
       .eq('user_id', user.id)
       .single()
 
     if (data && data.pretest_completed) {
-      // Sudah pernah pretest, redirect ke home
       router.push('/')
     }
   }
@@ -99,15 +98,16 @@ export default function Pretest() {
     setTimerActive(false)
     setLoading(true)
 
-    // Hitung skor
     const totalQuestions = questions.length
     const correctCount = questions.filter(function(q) {
       return answers[q.id] === q.correct_answer
     }).length
     const scorePercentage = Math.round((correctCount / totalQuestions) * 100)
 
-    // Hitung skor per submateri
+    // Calculate per-submateri scores
     const scoreBySubject = {}
+    const pretestScores = {} // For baseline tracking
+    
     questions.forEach(function(q) {
       if (!scoreBySubject[q.submateri]) {
         scoreBySubject[q.submateri] = { total: 0, correct: 0 }
@@ -118,36 +118,44 @@ export default function Pretest() {
       }
     })
 
+    // Convert to percentage for baseline
+    Object.keys(scoreBySubject).forEach(sub => {
+      const data = scoreBySubject[sub]
+      pretestScores[sub] = Math.round((data.correct / data.total) * 100)
+    })
+
     const levelInfo = getLevel(scorePercentage)
 
-    // Simpan ke student_profiles
+    // Save to student_profiles with baseline scores
     await supabase
       .from('student_profiles')
-      .upsert({
-        user_id: user.id,
+      .update({
         pretest_completed: true,
         pretest_score: scorePercentage,
+        pretest_scores: pretestScores, // Save baseline for comparison
         level: levelInfo.level,
         updated_at: new Date().toISOString()
       })
+      .eq('user_id', user.id)
 
-    // Simpan ke sessions
+    // Save session
     const { data: session } = await supabase
       .from('sessions')
       .insert({
         user_id: user.id,
-        session_type: 'latihan',
-        submateri: 'PRETEST',
+        session_type: 'pretest',
+        submateri: null,
         duration_minutes: 50,
-        start_time: new Date(Date.now() - (90 * 60 - timeLeft) * 1000).toISOString(),
+        start_time: new Date(Date.now() - (50 * 60 - timeLeft) * 1000).toISOString(),
         end_time: new Date().toISOString(),
         is_completed: true,
-        auto_submitted: autoSubmit
+        auto_submitted: autoSubmit,
+        final_score: scorePercentage
       })
       .select()
       .single()
 
-    // Simpan jawaban
+    // Save answers
     if (session) {
       const answersToInsert = questions.map(function(q) {
         return {
@@ -166,7 +174,8 @@ export default function Pretest() {
       correct: correctCount,
       total: totalQuestions,
       levelInfo: levelInfo,
-      scoreBySubject: scoreBySubject
+      scoreBySubject: scoreBySubject,
+      sessionId: session?.id
     })
     setPhase('result')
     setLoading(false)
@@ -189,7 +198,7 @@ export default function Pretest() {
   // ============ PHASE: INTRO ============
   if (phase === 'intro') {
     return (
-      <div className="min-h-screen bg-linear-to-br from-blue-600 to-purple-700 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-10 text-center">
           <div className="text-6xl mb-4">🎯</div>
           <h1 className="text-3xl font-bold mb-2">Initial Test</h1>
@@ -207,8 +216,8 @@ export default function Pretest() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">📝</span>
               <div>
-                <p className="font-semibold">42 Soal</p>
-                <p className="text-sm text-gray-500">6 soal dari setiap submateri UTBK</p>
+                <p className="font-semibold">40 Soal</p>
+                <p className="text-sm text-gray-500">Mix dari semua submateri UTBK</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -249,6 +258,7 @@ export default function Pretest() {
   if (phase === 'test') {
     const currentQuestion = questions[currentIndex]
     const answeredCount = Object.keys(answers).length
+    const isLongText = currentQuestion?.question_text?.length > 500
 
     return (
       <div className="min-h-screen bg-gray-50">
@@ -291,9 +301,31 @@ export default function Pretest() {
 
           {/* Question */}
           <div className="bg-white rounded-xl shadow-lg p-8 mb-4">
-            <p className="text-lg font-medium leading-relaxed mb-6">
-              {currentQuestion?.question_text}
-            </p>
+            
+            {/* Question Text - IMPROVED TYPOGRAPHY */}
+            <div className="mb-6">
+              {isLongText ? (
+                // Long text - Reading comprehension
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm text-blue-700 font-medium mb-3">
+                    <BookOpen size={18} />
+                    <span>Reading Passage</span>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200 max-h-[420px] overflow-y-auto">
+                    <p className="text-base leading-loose text-gray-800 whitespace-pre-line font-serif">
+                      {currentQuestion.question_text}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                // Short text - Normal question
+                <p className="text-lg font-medium leading-loose text-gray-800">
+                  {currentQuestion?.question_text}
+                </p>
+              )}
+            </div>
+
+            {/* Options */}
             <div className="space-y-3">
               {['A', 'B', 'C', 'D', 'E'].map(function(opt) {
                 const isSelected = answers[currentQuestion?.id] === opt
@@ -306,7 +338,9 @@ export default function Pretest() {
                     <span className={'font-bold mr-3 ' + (isSelected ? 'text-blue-600' : 'text-gray-500')}>
                       {opt}.
                     </span>
-                    {currentQuestion?.[`option_${opt.toLowerCase()}`]}
+                    <span className="leading-relaxed">
+                      {currentQuestion?.[`option_${opt.toLowerCase()}`]}
+                    </span>
                   </button>
                 )
               })}
@@ -382,7 +416,7 @@ export default function Pretest() {
 
   // ============ PHASE: RESULT ============
   if (phase === 'result' && result) {
-    const { score, correct, total, levelInfo, scoreBySubject } = result
+    const { score, correct, total, levelInfo, scoreBySubject, sessionId } = result
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -456,13 +490,23 @@ export default function Pretest() {
             )}
           </div>
 
-          {/* CTA Button */}
-          <button
-            onClick={function() { router.push('/') }}
-            className="w-full bg-blue-600 text-white py-4 rounded-xl text-xl font-bold hover:bg-blue-700 transition-all"
-          >
-            🚀 Mulai Belajar Sekarang!
-          </button>
+          {/* CTA Buttons */}
+          <div className="space-y-3">
+            {sessionId && (
+              <button
+                onClick={function() { router.push(`/review/${sessionId}`) }}
+                className="w-full bg-purple-600 text-white py-4 rounded-xl text-lg font-bold hover:bg-purple-700 transition-all"
+              >
+                📊 Lihat Review Lengkap
+              </button>
+            )}
+            <button
+              onClick={function() { router.push('/') }}
+              className="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold hover:bg-blue-700 transition-all"
+            >
+              🚀 Mulai Belajar Sekarang!
+            </button>
+          </div>
 
         </div>
       </div>
