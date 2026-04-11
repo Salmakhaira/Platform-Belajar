@@ -4,7 +4,7 @@ import { useAuth } from '@/components/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
-import { CheckCircle, XCircle, Clock, ArrowLeft, BookOpen, Lightbulb } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, ArrowLeft, BookOpen, Lightbulb, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 
 const SUBMATERI_NAMES = {
   PU: 'Penalaran Umum',
@@ -38,7 +38,6 @@ export default function ReviewPage() {
   const fetchReviewData = async () => {
     setLoading(true)
 
-    // Fetch session info
     const { data: sessionData, error: sessionError } = await supabase
       .from('sessions')
       .select('*')
@@ -54,7 +53,6 @@ export default function ReviewPage() {
 
     setSession(sessionData)
 
-    // Fetch answers with question details + tips_tricks
     const { data: answersData, error: answersError } = await supabase
       .from('user_answers')
       .select(`
@@ -110,6 +108,56 @@ export default function ReviewPage() {
   const unansweredCount = answers.filter(a => !a.user_answer).length
   const scorePercentage = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
 
+  // Calculate per-submateri breakdown
+  const submateriScores = {}
+  answers.forEach(a => {
+    const sub = a.questions?.submateri
+    if (!sub) return
+    
+    if (!submateriScores[sub]) {
+      submateriScores[sub] = { total: 0, correct: 0 }
+    }
+    submateriScores[sub].total++
+    if (a.is_correct) {
+      submateriScores[sub].correct++
+    }
+  })
+
+  // Convert to array and add percentages
+  const submateriAnalysis = Object.entries(submateriScores).map(([sub, data]) => {
+    const percentage = Math.round((data.correct / data.total) * 100)
+    let status = 'LEMAH'
+    let statusColor = 'red'
+    let icon = TrendingDown
+    
+    if (percentage >= 70) {
+      status = 'KUAT'
+      statusColor = 'green'
+      icon = TrendingUp
+    } else if (percentage >= 50) {
+      status = 'SEDANG'
+      statusColor = 'yellow'
+      icon = Minus
+    }
+    
+    return {
+      submateri: sub,
+      name: SUBMATERI_NAMES[sub] || sub,
+      correct: data.correct,
+      total: data.total,
+      percentage,
+      status,
+      statusColor,
+      icon
+    }
+  }).sort((a, b) => a.submateri.localeCompare(b.submateri))
+
+  const weakSubmateri = submateriAnalysis.filter(s => s.percentage < 50)
+  const mediumSubmateri = submateriAnalysis.filter(s => s.percentage >= 50 && s.percentage < 70)
+  const strongSubmateri = submateriAnalysis.filter(s => s.percentage >= 70)
+
+  const isPretest = session?.session_type === 'pretest'
+
   const filteredAnswers = answers.filter(a => {
     if (filter === 'correct') return a.is_correct
     if (filter === 'wrong') return !a.is_correct && a.user_answer
@@ -160,15 +208,18 @@ export default function ReviewPage() {
               Kembali
             </button>
             <div>
-              <h1 className="text-2xl font-bold">Review Jawaban</h1>
+              <h1 className="text-2xl font-bold">
+                {isPretest ? '📊 Hasil Initial Test' : 'Review Jawaban'}
+              </h1>
               <p className="text-gray-500 text-sm">
                 {session?.session_type === 'tryout' ? 'Tryout UTBK 2026' :
-                 session?.session_type === 'growup' ? 'Grow Up Session' :
+                 session?.session_type === 'pretest' ? 'Initial Test - Diagnostic Assessment' :
                  `Latihan ${session?.submateri} - ${SUBMATERI_NAMES[session?.submateri] || ''}`}
               </p>
             </div>
           </div>
 
+          {/* Score Summary */}
           <div className={`rounded-2xl border-2 p-8 mb-8 ${getScoreBg(scorePercentage)}`}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
               <div>
@@ -204,6 +255,125 @@ export default function ReviewPage() {
             </div>
           </div>
 
+          {/* PRETEST ANALYSIS - Only shown for pretest */}
+          {isPretest && submateriAnalysis.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border-2 border-blue-200">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="text-3xl">📊</div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">Analisis per Submateri</h2>
+                  <p className="text-sm text-gray-600">Identifikasi kekuatan dan kelemahan kamu</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 mb-6">
+                {submateriAnalysis.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <div
+                      key={item.submateri}
+                      className={`flex items-center justify-between p-4 rounded-xl border-2 ${
+                        item.statusColor === 'green' ? 'bg-green-50 border-green-200' :
+                        item.statusColor === 'yellow' ? 'bg-yellow-50 border-yellow-200' :
+                        'bg-red-50 border-red-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4 flex-1">
+                        <Icon
+                          size={24}
+                          className={
+                            item.statusColor === 'green' ? 'text-green-600' :
+                            item.statusColor === 'yellow' ? 'text-yellow-600' :
+                            'text-red-600'
+                          }
+                        />
+                        <div className="flex-1">
+                          <h3 className="font-bold text-gray-800">{item.submateri}</h3>
+                          <p className="text-sm text-gray-600">{item.name}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600">
+                            {item.correct}/{item.total} benar
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right ml-6">
+                        <p className={`text-3xl font-bold ${
+                          item.statusColor === 'green' ? 'text-green-600' :
+                          item.statusColor === 'yellow' ? 'text-yellow-600' :
+                          'text-red-600'
+                        }`}>
+                          {item.percentage}%
+                        </p>
+                        <p className={`text-sm font-semibold ${
+                          item.statusColor === 'green' ? 'text-green-600' :
+                          item.statusColor === 'yellow' ? 'text-yellow-600' :
+                          'text-red-600'
+                        }`}>
+                          {item.status}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Recommendations */}
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-300 rounded-xl p-6">
+                <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">💡</span>
+                  <span className="text-lg">Rekomendasi Belajar</span>
+                </h3>
+
+                {strongSubmateri.length > 0 && (
+                  <div className="mb-4">
+                    <p className="font-semibold text-green-700 mb-2">✅ Kekuatan Kamu:</p>
+                    <ul className="text-sm text-gray-700 space-y-1 ml-6">
+                      {strongSubmateri.map(s => (
+                        <li key={s.submateri}>
+                          <strong>{s.submateri}</strong> ({s.percentage}%) - Pertahankan dengan latihan rutin
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {mediumSubmateri.length > 0 && (
+                  <div className="mb-4">
+                    <p className="font-semibold text-yellow-700 mb-2">⚠️ Perlu Ditingkatkan:</p>
+                    <ul className="text-sm text-gray-700 space-y-1 ml-6">
+                      {mediumSubmateri.map(s => (
+                        <li key={s.submateri}>
+                          <strong>{s.submateri}</strong> ({s.percentage}%) - Fokus latihan lebih banyak
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {weakSubmateri.length > 0 && (
+                  <div className="mb-4">
+                    <p className="font-semibold text-red-700 mb-2">🎯 Prioritas Drilling:</p>
+                    <ul className="text-sm text-gray-700 space-y-1 ml-6">
+                      {weakSubmateri.map(s => (
+                        <li key={s.submateri}>
+                          <strong>{s.submateri}</strong> ({s.percentage}%) - Butuh latihan intensif & review materi
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="mt-6 pt-4 border-t border-blue-200">
+                  <p className="text-sm text-blue-800 font-medium">
+                    💪 Langkah Selanjutnya: Mulai latihan di submateri yang lemah, kemudian tingkatkan yang sedang!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Filter Buttons */}
           <div className="flex gap-3 mb-6 flex-wrap">
             <button
               onClick={() => setFilter('all')}
@@ -241,6 +411,7 @@ export default function ReviewPage() {
             )}
           </div>
 
+          {/* Questions Review */}
           <div className="space-y-6">
             {filteredAnswers.map((answer, idx) => (
               <div
@@ -307,7 +478,6 @@ export default function ReviewPage() {
                   ))}
                 </div>
 
-                {/* Explanation */}
                 {answer.questions?.explanation && (
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mb-3">
                     <div className="flex items-start gap-3">
@@ -322,7 +492,6 @@ export default function ReviewPage() {
                   </div>
                 )}
 
-                {/* Tips & Tricks */}
                 {answer.questions?.tips_tricks && (
                   <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg">
                     <div className="flex items-start gap-3">
@@ -340,25 +509,22 @@ export default function ReviewPage() {
             ))}
           </div>
 
-          <div className="flex gap-4 mt-8 justify-center">
+          {/* Action Buttons */}
+          <div className="flex gap-4 mt-8 justify-center flex-wrap">
             <button
               onClick={() => router.push('/latihan')}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
             >
               📝 Latihan Lagi
             </button>
-            <button
-              onClick={() => router.push('/progress')}
-              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-            >
-              📊 Lihat Progress
-            </button>
-            <button
-              onClick={() => router.push('/growup')}
-              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
-            >
-              🚀 Grow Up
-            </button>
+            {isPretest && (
+              <button
+                onClick={() => router.push('/tryout')}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+              >
+                🎯 Mulai Try Out
+              </button>
+            )}
           </div>
 
         </div>
