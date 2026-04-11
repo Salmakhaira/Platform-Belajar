@@ -138,7 +138,7 @@ export default function Pretest() {
         user_id: user.id,
         session_type: 'latihan',
         submateri: 'PRETEST',
-        duration_minutes: 90,
+        duration_minutes: 50,
         start_time: new Date(Date.now() - (90 * 60 - timeLeft) * 1000).toISOString(),
         end_time: new Date().toISOString(),
         is_completed: true,
@@ -200,7 +200,7 @@ export default function Pretest() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">⏱️</span>
               <div>
-                <p className="font-semibold">Durasi: 90 Menit</p>
+                <p className="font-semibold">Durasi: 50 Menit</p>
                 <p className="text-sm text-gray-500">Timer berjalan otomatis setelah mulai</p>
               </div>
             </div>
