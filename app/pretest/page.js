@@ -31,7 +31,7 @@ export default function Pretest() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState({})
   const [loading, setLoading] = useState(false)
-  const [timeLeft, setTimeLeft] = useState(50 * 60) // 50 menit
+  const [timeLeft, setTimeLeft] = useState(50 * 60)
   const [timerActive, setTimerActive] = useState(false)
   const [result, setResult] = useState(null)
 
@@ -74,7 +74,6 @@ export default function Pretest() {
       .from('questions')
       .select('*')
       .eq('is_pretest', true)
-      .order('submateri')
 
     if (error || !data || data.length === 0) {
       alert('Error memuat soal pretest: ' + (error?.message || 'Soal tidak ditemukan'))
@@ -82,7 +81,15 @@ export default function Pretest() {
       return
     }
 
-    setQuestions(data)
+    // CRITICAL FIX: Sort questions in correct order to match grid header
+    const sortOrder = ['PU', 'PPU', 'PBM', 'PK', 'LBI', 'LBE', 'PM']
+    const sortedQuestions = data.sort(function(a, b) {
+      const indexA = sortOrder.indexOf(a.submateri)
+      const indexB = sortOrder.indexOf(b.submateri)
+      return indexA - indexB
+    })
+
+    setQuestions(sortedQuestions)
     setPhase('test')
     setTimerActive(true)
     setLoading(false)
@@ -104,9 +111,8 @@ export default function Pretest() {
     }).length
     const scorePercentage = Math.round((correctCount / totalQuestions) * 100)
 
-    // Calculate per-submateri scores
     const scoreBySubject = {}
-    const pretestScores = {} // For baseline tracking
+    const pretestScores = {}
     
     questions.forEach(function(q) {
       if (!scoreBySubject[q.submateri]) {
@@ -118,7 +124,6 @@ export default function Pretest() {
       }
     })
 
-    // Convert to percentage for baseline
     Object.keys(scoreBySubject).forEach(sub => {
       const data = scoreBySubject[sub]
       pretestScores[sub] = Math.round((data.correct / data.total) * 100)
@@ -126,19 +131,17 @@ export default function Pretest() {
 
     const levelInfo = getLevel(scorePercentage)
 
-    // Save to student_profiles with baseline scores
     await supabase
       .from('student_profiles')
       .update({
         pretest_completed: true,
         pretest_score: scorePercentage,
-        pretest_scores: pretestScores, // Save baseline for comparison
+        pretest_scores: pretestScores,
         level: levelInfo.level,
         updated_at: new Date().toISOString()
       })
       .eq('user_id', user.id)
 
-    // Save session
     const { data: session } = await supabase
       .from('sessions')
       .insert({
@@ -155,7 +158,6 @@ export default function Pretest() {
       .select()
       .single()
 
-    // Save answers
     if (session) {
       const answersToInsert = questions.map(function(q) {
         return {
@@ -263,7 +265,6 @@ export default function Pretest() {
     return (
       <div className="min-h-screen bg-gray-50">
 
-        {/* Top Bar */}
         <div className="bg-white shadow-md px-6 py-4 flex items-center justify-between sticky top-0 z-10">
           <div>
             <p className="font-bold text-lg">🎯 Initial Test</p>
@@ -285,7 +286,6 @@ export default function Pretest() {
 
         <div className="max-w-4xl mx-auto p-6">
 
-          {/* Progress */}
           <div className="bg-white rounded-lg p-4 mb-4 shadow">
             <div className="flex justify-between text-sm mb-2">
               <span className="font-medium">Soal {currentIndex + 1} dari {questions.length}</span>
@@ -299,13 +299,10 @@ export default function Pretest() {
             </div>
           </div>
 
-          {/* Question */}
           <div className="bg-white rounded-xl shadow-lg p-8 mb-4">
             
-            {/* Question Text - IMPROVED TYPOGRAPHY */}
             <div className="mb-6">
               {isLongText ? (
-                // Long text - Reading comprehension
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-sm text-blue-700 font-medium mb-3">
                     <BookOpen size={18} />
@@ -318,14 +315,12 @@ export default function Pretest() {
                   </div>
                 </div>
               ) : (
-                // Short text - Normal question
                 <p className="text-lg font-medium leading-loose text-gray-800">
                   {currentQuestion?.question_text}
                 </p>
               )}
             </div>
 
-            {/* Options */}
             <div className="space-y-3">
               {['A', 'B', 'C', 'D', 'E'].map(function(opt) {
                 const isSelected = answers[currentQuestion?.id] === opt
@@ -347,7 +342,6 @@ export default function Pretest() {
             </div>
           </div>
 
-          {/* Navigation */}
           <div className="flex justify-between items-center mb-6">
             <button
               onClick={function() { setCurrentIndex(Math.max(0, currentIndex - 1)) }}
@@ -366,7 +360,6 @@ export default function Pretest() {
             </button>
           </div>
 
-          {/* Navigator Grid */}
           <div className="bg-white rounded-xl shadow p-6">
             <p className="font-bold mb-4">Navigasi Soal</p>
             <div className="grid grid-cols-7 gap-2 mb-3">
@@ -422,7 +415,6 @@ export default function Pretest() {
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-3xl mx-auto">
 
-          {/* Header Result */}
           <div className={'rounded-2xl border-2 p-8 mb-6 text-center ' + levelInfo.bg}>
             <div className="text-6xl mb-3">{levelInfo.emoji}</div>
             <h1 className="text-3xl font-bold mb-2">Pretest Selesai!</h1>
@@ -436,7 +428,6 @@ export default function Pretest() {
             <p className="text-gray-600 mt-4 text-sm">{levelInfo.desc}</p>
           </div>
 
-          {/* Score Per Submateri */}
           <div className="bg-white rounded-xl shadow p-6 mb-6">
             <h2 className="text-xl font-bold mb-5">📊 Skor Per Submateri</h2>
             <div className="space-y-4">
@@ -461,7 +452,6 @@ export default function Pretest() {
             </div>
           </div>
 
-          {/* Level Guide */}
           <div className="bg-white rounded-xl shadow p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">🗺️ Rekomendasi Belajar</h2>
             {score < 41 && (
@@ -490,7 +480,6 @@ export default function Pretest() {
             )}
           </div>
 
-          {/* CTA Buttons */}
           <div className="space-y-3">
             {sessionId && (
               <button
