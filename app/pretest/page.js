@@ -362,15 +362,6 @@ export default function Pretest() {
 
           <div className="bg-white rounded-xl shadow p-6">
             <p className="font-bold mb-4">Navigasi Soal</p>
-            <div className="grid grid-cols-7 gap-2 mb-3">
-              {['PU', 'PPU', 'PBM', 'PK', 'LBI', 'LBE', 'PM'].map(function(sub) {
-                return (
-                  <div key={sub} className="text-center text-xs font-bold text-gray-500 py-1">
-                    {sub}
-                  </div>
-                )
-              })}
-            </div>
             <div className="grid grid-cols-7 gap-2">
               {questions.map(function(q, idx) {
                 const isAnswered = answers[q.id]
