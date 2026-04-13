@@ -81,7 +81,6 @@ export default function Pretest() {
       return
     }
 
-    // CRITICAL FIX: Sort questions in correct order to match grid header
     const sortOrder = ['PU', 'PPU', 'PBM', 'PK', 'LBI', 'LBE', 'PM']
     const sortedQuestions = data.sort(function(a, b) {
       const indexA = sortOrder.indexOf(a.submateri)
@@ -197,7 +196,6 @@ export default function Pretest() {
 
   if (!user) return null
 
-  // ============ PHASE: INTRO ============
   if (phase === 'intro') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center p-4">
@@ -256,11 +254,9 @@ export default function Pretest() {
     )
   }
 
-  // ============ PHASE: TEST ============
   if (phase === 'test') {
     const currentQuestion = questions[currentIndex]
     const answeredCount = Object.keys(answers).length
-    const isLongText = currentQuestion?.question_text?.length > 500
 
     return (
       <div className="min-h-screen bg-gray-50">
@@ -301,24 +297,97 @@ export default function Pretest() {
 
           <div className="bg-white rounded-xl shadow-lg p-8 mb-4">
             
+            {/* UPDATED: Question rendering with IMAGE SUPPORT */}
             <div className="mb-6">
-              {isLongText ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm text-blue-700 font-medium mb-3">
-                    <BookOpen size={18} />
-                    <span>Reading Passage</span>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200 max-h-[420px] overflow-y-auto">
-                    <p className="text-base leading-loose text-gray-800 whitespace-pre-line font-serif">
-                      {currentQuestion.question_text}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-lg font-medium leading-loose text-gray-800">
-                  {currentQuestion?.question_text}
-                </p>
-              )}
+              {(() => {
+                const text = currentQuestion?.question_text || ''
+                const hasImage = text.includes('![') && text.includes('](https://')
+                
+                if (hasImage) {
+                  // Parse markdown images
+                  const parts = []
+                  let lastIndex = 0
+                  const imageRegex = /!\[([^\]]*)\]\((https:\/\/[^)]+)\)/g
+                  let match
+                  
+                  while ((match = imageRegex.exec(text)) !== null) {
+                    if (match.index > lastIndex) {
+                      parts.push({
+                        type: 'text',
+                        content: text.substring(lastIndex, match.index)
+                      })
+                    }
+                    
+                    parts.push({
+                      type: 'image',
+                      alt: match[1] || 'Gambar soal',
+                      url: match[2]
+                    })
+                    
+                    lastIndex = match.index + match[0].length
+                  }
+                  
+                  if (lastIndex < text.length) {
+                    parts.push({
+                      type: 'text',
+                      content: text.substring(lastIndex)
+                    })
+                  }
+                  
+                  return (
+                    <div className="space-y-4">
+                      {parts.map((part, idx) => {
+                        if (part.type === 'image') {
+                          return (
+                            <div key={idx} className="flex justify-center my-6">
+                              <img 
+                                src={part.url}
+                                alt={part.alt}
+                                className="max-w-full max-h-96 rounded-lg border-2 border-gray-300 shadow-md"
+                                onError={(e) => {
+                                  e.target.style.display = 'none'
+                                  console.error('Failed to load image:', part.url)
+                                }}
+                              />
+                            </div>
+                          )
+                        }
+                        
+                        return part.content.trim() ? (
+                          <p key={idx} className="text-lg font-medium leading-loose text-gray-800 whitespace-pre-line">
+                            {part.content}
+                          </p>
+                        ) : null
+                      })}
+                    </div>
+                  )
+                }
+                
+                // No image - check if long text
+                const isLongText = text.length > 500
+                
+                if (isLongText) {
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-sm text-blue-700 font-medium mb-3">
+                        <BookOpen size={18} />
+                        <span>Reading Passage</span>
+                      </div>
+                      <div className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200 max-h-[420px] overflow-y-auto">
+                        <p className="text-base leading-loose text-gray-800 whitespace-pre-line font-serif">
+                          {text}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                }
+                
+                return (
+                  <p className="text-lg font-medium leading-loose text-gray-800 whitespace-pre-line">
+                    {text}
+                  </p>
+                )
+              })()}
             </div>
 
             <div className="space-y-3">
@@ -398,7 +467,6 @@ export default function Pretest() {
     )
   }
 
-  // ============ PHASE: RESULT ============
   if (phase === 'result' && result) {
     const { score, correct, total, levelInfo, scoreBySubject, sessionId } = result
 
