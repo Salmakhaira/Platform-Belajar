@@ -55,14 +55,21 @@ export default function Pretest() {
     return function() { clearTimeout(timer) }
   }, [timerActive, timeLeft])
 
+  // UPDATED: Better error handling with maybeSingle
   async function checkAlreadyDone() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('student_profiles')
       .select('pretest_completed')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error checking pretest status:', error)
+      return
+    }
 
     if (data && data.pretest_completed) {
+      alert('Kamu sudah menyelesaikan Initial Test!')
       router.push('/')
     }
   }
@@ -98,88 +105,121 @@ export default function Pretest() {
     setAnswers({ ...answers, [questionId]: answer })
   }
 
+  // UPDATED: Complete error handling for all operations
   async function handleSubmit(autoSubmit = false) {
     if (!autoSubmit && !confirm('Yakin ingin submit pretest?')) return
 
     setTimerActive(false)
     setLoading(true)
 
-    const totalQuestions = questions.length
-    const correctCount = questions.filter(function(q) {
-      return answers[q.id] === q.correct_answer
-    }).length
-    const scorePercentage = Math.round((correctCount / totalQuestions) * 100)
+    try {
+      const totalQuestions = questions.length
+      const correctCount = questions.filter(function(q) {
+        return answers[q.id] === q.correct_answer
+      }).length
+      const scorePercentage = Math.round((correctCount / totalQuestions) * 100)
 
-    const scoreBySubject = {}
-    const pretestScores = {}
-    
-    questions.forEach(function(q) {
-      if (!scoreBySubject[q.submateri]) {
-        scoreBySubject[q.submateri] = { total: 0, correct: 0 }
-      }
-      scoreBySubject[q.submateri].total++
-      if (answers[q.id] === q.correct_answer) {
-        scoreBySubject[q.submateri].correct++
-      }
-    })
-
-    Object.keys(scoreBySubject).forEach(sub => {
-      const data = scoreBySubject[sub]
-      pretestScores[sub] = Math.round((data.correct / data.total) * 100)
-    })
-
-    const levelInfo = getLevel(scorePercentage)
-
-    await supabase
-      .from('student_profiles')
-      .update({
-        pretest_completed: true,
-        pretest_score: scorePercentage,
-        pretest_scores: pretestScores,
-        level: levelInfo.level,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', user.id)
-
-    const { data: session } = await supabase
-      .from('sessions')
-      .insert({
-        user_id: user.id,
-        session_type: 'pretest',
-        submateri: null,
-        duration_minutes: 50,
-        start_time: new Date(Date.now() - (50 * 60 - timeLeft) * 1000).toISOString(),
-        end_time: new Date().toISOString(),
-        is_completed: true,
-        auto_submitted: autoSubmit,
-        final_score: scorePercentage
-      })
-      .select()
-      .single()
-
-    if (session) {
-      const answersToInsert = questions.map(function(q) {
-        return {
-          session_id: session.id,
-          question_id: q.id,
-          user_answer: answers[q.id] || null,
-          is_correct: answers[q.id] === q.correct_answer,
-          time_taken_seconds: 0
+      const scoreBySubject = {}
+      const pretestScores = {}
+      
+      questions.forEach(function(q) {
+        if (!scoreBySubject[q.submateri]) {
+          scoreBySubject[q.submateri] = { total: 0, correct: 0 }
+        }
+        scoreBySubject[q.submateri].total++
+        if (answers[q.id] === q.correct_answer) {
+          scoreBySubject[q.submateri].correct++
         }
       })
-      await supabase.from('user_answers').insert(answersToInsert)
-    }
 
-    setResult({
-      score: scorePercentage,
-      correct: correctCount,
-      total: totalQuestions,
-      levelInfo: levelInfo,
-      scoreBySubject: scoreBySubject,
-      sessionId: session?.id
-    })
-    setPhase('result')
-    setLoading(false)
+      Object.keys(scoreBySubject).forEach(sub => {
+        const data = scoreBySubject[sub]
+        pretestScores[sub] = Math.round((data.correct / data.total) * 100)
+      })
+
+      const levelInfo = getLevel(scorePercentage)
+
+      // Update student profile with comprehensive error handling
+      const { error: profileError } = await supabase
+        .from('student_profiles')
+        .update({
+          pretest_completed: true,
+          pretest_score: scorePercentage,
+          pretest_scores: pretestScores,
+          level: levelInfo.level,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+
+      if (profileError) {
+        console.error('Error updating profile:', profileError)
+        alert('Error menyimpan hasil pretest: ' + profileError.message)
+        setLoading(false)
+        return
+      }
+
+      // Create session with error handling
+      const { data: session, error: sessionError } = await supabase
+        .from('sessions')
+        .insert({
+          user_id: user.id,
+          session_type: 'pretest',
+          submateri: null,
+          duration_minutes: 50,
+          start_time: new Date(Date.now() - (50 * 60 - timeLeft) * 1000).toISOString(),
+          end_time: new Date().toISOString(),
+          is_completed: true,
+          auto_submitted: autoSubmit,
+          final_score: scorePercentage
+        })
+        .select()
+        .single()
+
+      if (sessionError) {
+        console.error('Error creating session:', sessionError)
+        alert('Error menyimpan session: ' + sessionError.message)
+        setLoading(false)
+        return
+      }
+
+      // Insert answers with error handling
+      if (session) {
+        const answersToInsert = questions.map(function(q) {
+          return {
+            session_id: session.id,
+            question_id: q.id,
+            user_answer: answers[q.id] || null,
+            is_correct: answers[q.id] === q.correct_answer,
+            time_taken_seconds: 0
+          }
+        })
+        
+        const { error: answersError } = await supabase
+          .from('user_answers')
+          .insert(answersToInsert)
+
+        if (answersError) {
+          console.error('Error saving answers:', answersError)
+          // Don't block - continue to show results even if answers fail to save
+        }
+      }
+
+      setResult({
+        score: scorePercentage,
+        correct: correctCount,
+        total: totalQuestions,
+        levelInfo: levelInfo,
+        scoreBySubject: scoreBySubject,
+        sessionId: session?.id
+      })
+      setPhase('result')
+      
+    } catch (error) {
+      console.error('Unexpected error in handleSubmit:', error)
+      alert('Terjadi kesalahan: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function formatTime(seconds) {
@@ -297,14 +337,12 @@ export default function Pretest() {
 
           <div className="bg-white rounded-xl shadow-lg p-8 mb-4">
             
-            {/* UPDATED: Question rendering with IMAGE SUPPORT */}
             <div className="mb-6">
               {(() => {
                 const text = currentQuestion?.question_text || ''
                 const hasImage = text.includes('![') && text.includes('](https://')
                 
                 if (hasImage) {
-                  // Parse markdown images
                   const parts = []
                   let lastIndex = 0
                   const imageRegex = /!\[([^\]]*)\]\((https:\/\/[^)]+)\)/g
@@ -363,7 +401,6 @@ export default function Pretest() {
                   )
                 }
                 
-                // No image - check if long text
                 const isLongText = text.length > 500
                 
                 if (isLongText) {
