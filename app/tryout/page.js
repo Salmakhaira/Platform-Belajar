@@ -29,17 +29,23 @@ function TryoutContent() {
   }, [user, router])
 
   async function checkPretest() {
-    const { data } = await supabase
-      .from('student_profiles')
-      .select('pretest_completed')
-      .eq('user_id', user.id)
-      .single()
+  const { data, error } = await supabase
+    .from('student_profiles')
+    .select('pretest_completed')
+    .eq('user_id', user.id)
+    .maybeSingle()
 
-    if (!data || !data.pretest_completed) {
-      alert('Kamu harus menyelesaikan Initial Test terlebih dahulu!')
-      router.push('/pretest')
-    }
+  if (error) {
+    console.error('Error checking pretest:', error)
+    return
   }
+
+  if (!data || !data.pretest_completed) {
+    alert('Kamu harus menyelesaikan Initial Test terlebih dahulu!')
+    router.push('/pretest')
+    return
+  }
+}
 
   const startTryout = async () => {
     setLoading(true)
