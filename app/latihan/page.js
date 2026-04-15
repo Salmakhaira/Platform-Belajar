@@ -612,7 +612,7 @@ export default function Latihan() {
                     <div className="border-t pt-3 mt-3">
                       <p className="text-sm font-semibold text-gray-700 mb-2">📖 Pembahasan:</p>
                       <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                        {currentQuestion?.pembahasan || 'Pembahasan belum tersedia.'}
+                        {currentQuestion?.explanation || 'Pembahasan belum tersedia.'}
                       </p>
                     </div>
                   </div>
