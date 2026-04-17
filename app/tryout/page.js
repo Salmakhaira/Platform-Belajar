@@ -331,122 +331,146 @@ export default function Tryout() {
   }
 
   // ========== STAGE 2: Tryout Test ==========
-  if (stage === 2) {
-    const currentQuestion = questions[currentIndex]
-    const answeredCount = Object.keys(answers).length
+  // ========== STAGE 2: Tryout Test ==========
+if (stage === 2) {
+  const currentQuestion = questions[currentIndex]
+  const answeredCount = Object.keys(answers).length
 
-    return (
-      <div>
-        <Navbar />
-        <Timer
-          durationMinutes={120}
-          onTimeUp={function() { submitAnswers(true) }}
-          isActive={isActive}
-        />
+  return (
+    <div>
+      <Navbar />
+      <Timer
+        durationMinutes={120}
+        onTimeUp={function() { submitAnswers(true) }}
+        isActive={isActive}
+      />
 
-        <div className="min-h-screen bg-gray-50 pt-20 pb-8 px-4">
-          <div className="max-w-4xl mx-auto">
+      <div className="min-h-screen bg-gray-50 pt-20 pb-8 px-4">
+        <div className="max-w-7xl mx-auto">
 
-            {/* Progress Bar */}
-            <div className="bg-white rounded-lg p-4 mb-6 shadow">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">
-                  Tryout {selectedPackage} — Soal {currentIndex + 1}/{questions.length}
-                </span>
-                <span className="text-sm text-gray-600">
-                  Terjawab: {answeredCount}/{questions.length}
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-purple-600 h-2 rounded-full transition-all"
-                  style={{ width: ((currentIndex + 1) / questions.length * 100) + '%' }}
-                />
-              </div>
+          {/* Progress Bar - Full Width */}
+          <div className="bg-white rounded-lg p-4 mb-6 shadow">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium">
+                Tryout {selectedPackage} — Soal {currentIndex + 1}/{questions.length}
+              </span>
+              <span className="text-sm text-gray-600">
+                Terjawab: {answeredCount}/{questions.length}
+              </span>
             </div>
-
-            {/* Question Card */}
-            <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-              <div className="mb-2">
-                <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
-                  {currentQuestion?.submateri}
-                </span>
-              </div>
-              <h2 className="text-xl font-medium mb-6 leading-relaxed whitespace-pre-line">
-                {currentQuestion?.question_text}
-              </h2>
-              <div className="space-y-3">
-                {['A', 'B', 'C', 'D', 'E'].map(function(opt) {
-                  const isSelected = answers[currentQuestion?.id]?.answer === opt
-                  return (
-                    <button
-                      key={opt}
-                      onClick={function() { handleAnswer(currentQuestion.id, opt) }}
-                      className={'w-full text-left p-4 rounded-xl border-2 transition-all ' + (isSelected ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300')}
-                    >
-                      <span className="font-bold mr-3">{opt}.</span>
-                      {currentQuestion?.[`option_${opt.toLowerCase()}`]}
-                    </button>
-                  )
-                })}
-              </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-purple-600 h-2 rounded-full transition-all"
+                style={{ width: ((currentIndex + 1) / questions.length * 100) + '%' }}
+              />
             </div>
+          </div>
 
-            {/* Navigation Buttons */}
-            <div className="flex justify-between items-center mb-6">
-              <button
-                onClick={function() { setCurrentIndex(Math.max(0, currentIndex - 1)) }}
-                disabled={currentIndex === 0}
-                className="flex items-center gap-2 px-6 py-3 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={20} />
-                Sebelumnya
-              </button>
-              {currentIndex === questions.length - 1 ? (
+          {/* Main Content: Question (Left) + Navigation (Right) */}
+          <div className="grid lg:grid-cols-[1fr_320px] gap-6">
+            
+            {/* LEFT SIDE: Question Card */}
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-lg p-8">
+                <div className="mb-4">
+                  <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
+                    {currentQuestion?.submateri}
+                  </span>
+                </div>
+                <h2 className="text-xl font-medium mb-6 leading-relaxed whitespace-pre-line">
+                  {currentQuestion?.question_text}
+                </h2>
+                <div className="space-y-3">
+                  {['A', 'B', 'C', 'D', 'E'].map(function(opt) {
+                    const isSelected = answers[currentQuestion?.id]?.answer === opt
+                    return (
+                      <button
+                        key={opt}
+                        onClick={function() { handleAnswer(currentQuestion.id, opt) }}
+                        className={'w-full text-left p-4 rounded-xl border-2 transition-all ' + (isSelected ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300')}
+                      >
+                        <span className="font-bold mr-3">{opt}.</span>
+                        {currentQuestion?.[`option_${opt.toLowerCase()}`]}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Navigation Buttons */}
+              <div className="flex justify-between items-center">
                 <button
-                  onClick={function() { submitAnswers(false) }}
-                  disabled={loading}
-                  className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  onClick={function() { setCurrentIndex(Math.max(0, currentIndex - 1)) }}
+                  disabled={currentIndex === 0}
+                  className="flex items-center gap-2 px-6 py-3 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
-                  <Send size={20} />
-                  {loading ? 'Menyimpan...' : 'Submit'}
+                  <ChevronLeft size={20} />
+                  Sebelumnya
                 </button>
-              ) : (
-                <button
-                  onClick={function() { setCurrentIndex(Math.min(questions.length - 1, currentIndex + 1)) }}
-                  className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                >
-                  Selanjutnya
-                  <ChevronRight size={20} />
-                </button>
-              )}
+                {currentIndex === questions.length - 1 ? (
+                  <button
+                    onClick={function() { submitAnswers(false) }}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
+                  >
+                    <Send size={20} />
+                    {loading ? 'Menyimpan...' : 'Submit'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={function() { setCurrentIndex(Math.min(questions.length - 1, currentIndex + 1)) }}
+                    className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                  >
+                    Selanjutnya
+                    <ChevronRight size={20} />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Question Navigator */}
-            <div className="bg-white rounded-lg p-6 shadow">
-              <h3 className="font-bold mb-4">Navigasi Soal</h3>
-              <div className="grid grid-cols-10 gap-2">
-                {questions.map(function(q, idx) {
-                  const isAnswered = answers[q.id]
-                  const isCurrent = idx === currentIndex
-                  return (
-                    <button
-                      key={q.id}
-                      onClick={function() { setCurrentIndex(idx) }}
-                      className={'aspect-square rounded-lg font-bold text-sm transition-all ' + (isCurrent ? 'bg-purple-600 text-white' : isAnswered ? 'bg-green-100 text-green-800 border-2 border-green-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
-                    >
-                      {idx + 1}
-                    </button>
-                  )
-                })}
+            {/* RIGHT SIDE: Navigation Sidebar (Sticky) */}
+            <div className="lg:sticky lg:top-24 lg:self-start">
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <h3 className="font-bold mb-4 text-gray-800">Navigasi Soal</h3>
+                <div className="grid grid-cols-5 gap-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
+                  {questions.map(function(q, idx) {
+                    const isAnswered = answers[q.id]
+                    const isCurrent = idx === currentIndex
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={function() { setCurrentIndex(idx) }}
+                        className={'aspect-square rounded-lg font-bold text-xs transition-all ' + (isCurrent ? 'bg-purple-600 text-white ring-2 ring-purple-300' : isAnswered ? 'bg-green-100 text-green-800 border-2 border-green-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
+                      >
+                        {idx + 1}
+                      </button>
+                    )
+                  })}
+                </div>
+                
+                {/* Legend */}
+                <div className="mt-4 pt-4 border-t space-y-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-green-100 border-2 border-green-500"></div>
+                    <span className="text-gray-600">Terjawab</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-gray-100"></div>
+                    <span className="text-gray-600">Belum</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-purple-600"></div>
+                    <span className="text-gray-600">Sekarang</span>
+                  </div>
+                </div>
               </div>
             </div>
 
           </div>
         </div>
       </div>
-    )
-  }
-
+    </div>
+  )
+}
   return null
 }
