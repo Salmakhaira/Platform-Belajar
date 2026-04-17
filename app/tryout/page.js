@@ -179,72 +179,103 @@ export default function Tryout() {
   }
 
   async function submitAnswers(autoSubmit = false) {
-    if (!autoSubmit && !confirm('Yakin ingin submit jawaban?')) return
+  if (!autoSubmit && !confirm('Yakin ingin submit jawaban?')) return
 
-    if (autoSubmit) {
-      alert('Waktu habis! Jawaban akan otomatis terkirim.')
-    }
-
-    setIsActive(false)
-    setLoading(true)
-
-    // Calculate score
-    const totalQuestions = questions.length
-    const correctCount = questions.filter(q => answers[q.id]?.answer === q.correct_answer).length
-    const scorePercentage = Math.round((correctCount / totalQuestions) * 100)
-
-    // Get target passing grade
-    const { data: profile } = await supabase
-      .from('student_profiles')
-      .select('target_passing_grade')
-      .eq('user_id', user.id)
-      .single()
-
-    const targetGrade = profile?.target_passing_grade || 700
-
-    // Update session
-    await supabase
-      .from('sessions')
-      .update({
-        end_time: new Date().toISOString(),
-        is_completed: true,
-        auto_submitted: autoSubmit,
-        final_score: scorePercentage
-      })
-      .eq('id', sessionId)
-
-    // Insert answers
-    const answersToInsert = questions.map(function(q) {
-      return {
-        session_id: sessionId,
-        question_id: q.id,
-        user_answer: answers[q.id]?.answer || null,
-        is_correct: answers[q.id]?.answer === q.correct_answer,
-        time_taken_seconds: answers[q.id]?.timeTaken || 0
-      }
-    })
-
-    await supabase.from('user_answers').insert(answersToInsert)
-
-    // Update profile
-    await supabase
-      .from('student_profiles')
-      .update({
-        current_score: scorePercentage,
-        needs_drilling: scorePercentage < targetGrade
-      })
-      .eq('user_id', user.id)
-
-    setLoading(false)
-
-    // Redirect based on score
-    if (scorePercentage < targetGrade) {
-      router.push(`/drilling?session=${sessionId}`)
-    } else {
-      router.push(`/review/${sessionId}`)
-    }
+  if (autoSubmit) {
+    alert('Waktu habis! Jawaban akan otomatis terkirim.')
   }
 
+  setIsActive(false)
+  setLoading(true)
+
+  // Calculate detailed scores using UTBK system
+  const totalQuestions = questions.length
+  const correctAnswers = questions.filter(q => answers[q.id]?.answer === q.correct_answer).length
+  const wrongAnswers = Object.keys(answers).length - correctAnswers
+  
+  // Import scoring function
+  const { calculateUTBKScore, calculatePerSubmateri } = await import('@/lib/utbkScoring')
+  
+  const scoreResult = calculateUTBKScore(totalQuestions, correctAnswers, wrongAnswers)
+  const submateriScores = calculatePerSubmateri(questions, answers)
+
+  // Update session with detailed scores
+  await supabase
+    .from('sessions')
+    .update({
+      end_time: new Date().toISOString(),
+      is_completed: true,
+      auto_submitted: autoSubmit,
+      final_score: scoreResult.normalizedScore, // Store normalized UTBK score
+      score_detail: {
+        rawScore: scoreResult.rawScore,
+        normalizedScore: scoreResult.normalizedScore,
+        correct: scoreResult.correct,
+        wrong: scoreResult.wrong,
+        unanswered: scoreResult.unanswered,
+        percentage: scoreResult.percentage,
+        submateriScores: submateriScores
+      }
+    })
+    .eq('id', sessionId)
+
+  // Insert answers
+  const answersToInsert = questions.map(function(q) {
+    return {
+      session_id: sessionId,
+      question_id: q.id,
+      user_answer: answers[q.id]?.answer || null,
+      is_correct: answers[q.id]?.answer === q.correct_answer,
+      time_taken_seconds: answers[q.id]?.timeTaken || 0
+    }
+  })
+
+  await supabase.from('user_answers').insert(answersToInsert)
+
+  // Update student profile - increment tryout count
+  const { data: profile } = await supabase
+    .from('student_profiles')
+    .select('tryout_completed_count, latest_tryout_scores')
+    .eq('user_id', user.id)
+    .single()
+
+  const newCount = (profile?.tryout_completed_count || 0) + 1
+  
+  // Keep latest 3 tryout scores
+  let latestScores = profile?.latest_tryout_scores || []
+  latestScores.push({
+    sessionId: sessionId,
+    tryoutNumber: selectedPackage,
+    normalizedScore: scoreResult.normalizedScore,
+    percentage: scoreResult.percentage,
+    submateriScores: submateriScores,
+    date: new Date().toISOString()
+  })
+  if (latestScores.length > 3) {
+    latestScores = latestScores.slice(-3) // Keep only last 3
+  }
+
+  await supabase
+    .from('student_profiles')
+    .update({
+      current_score: scoreResult.normalizedScore,
+      tryout_completed_count: newCount,
+      latest_tryout_scores: latestScores
+    })
+    .eq('user_id', user.id)
+
+  setLoading(false)
+
+  // Redirect based on tryout count
+  if (newCount >= 3) {
+    // After 3 tryouts, show analysis
+    router.push(`/analysis?highlight=true`)
+  } else {
+    // Show regular review
+    router.push(`/review/${sessionId}`)
+  }
+}
+  
   if (!user) return null
 
   // ========================================
