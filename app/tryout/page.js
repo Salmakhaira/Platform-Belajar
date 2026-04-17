@@ -17,6 +17,22 @@ const SUBMATERI = [
   { code: 'PM', name: 'Penalaran Matematika' }
 ]
 
+// ========== HELPER FUNCTIONS ==========
+function calculateDuration(questionCount) {
+  // 1 soal = 1.18 menit
+  return Math.round(questionCount * 1.18)
+}
+
+function formatDuration(minutes) {
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  
+  if (hours > 0) {
+    return `${hours} jam ${mins} menit`
+  }
+  return `${minutes} menit`
+}
+
 export default function Tryout() {
   const { user } = useAuth()
   const router = useRouter()
@@ -31,6 +47,7 @@ export default function Tryout() {
   const [isActive, setIsActive] = useState(false)
   const [loading, setLoading] = useState(false)
   const [startTime, setStartTime] = useState(null)
+  const [durationMinutes, setDurationMinutes] = useState(120) // Dynamic duration
 
   useEffect(function() {
     if (!user) {
@@ -117,6 +134,10 @@ export default function Tryout() {
       return sortOrder.indexOf(a.submateri) - sortOrder.indexOf(b.submateri)
     })
 
+    // Calculate duration based on question count: 1 soal = 1.18 menit
+    const questionCount = sortedQuestions.length
+    const calculatedDuration = calculateDuration(questionCount)
+
     // Create session
     const { data: session, error: sessionError } = await supabase
       .from('sessions')
@@ -124,7 +145,7 @@ export default function Tryout() {
         user_id: user.id,
         session_type: 'tryout',
         submateri: null,
-        duration_minutes: 120,
+        duration_minutes: calculatedDuration, // Dynamic duration!
         start_time: new Date().toISOString(),
         tryout_number: packageNum
       })
@@ -140,6 +161,7 @@ export default function Tryout() {
     setQuestions(sortedQuestions)
     setSessionId(session.id)
     setSelectedPackage(packageNum)
+    setDurationMinutes(calculatedDuration) // Set dynamic duration
     setIsActive(true)
     setStartTime(Date.now())
     setStage(2)
@@ -225,7 +247,9 @@ export default function Tryout() {
 
   if (!user) return null
 
-  // ========== STAGE 1: Pilih Paket Tryout ==========
+  // ========================================
+  // STAGE 1: PILIH PAKET TRYOUT
+  // ========================================
   if (stage === 1) {
     return (
       <div>
@@ -247,15 +271,15 @@ export default function Tryout() {
                 <div className="flex items-start gap-3">
                   <span className="text-3xl">⏱️</span>
                   <div>
-                    <p className="font-semibold text-lg">Durasi: 120 menit (2 jam)</p>
-                    <p className="text-sm text-gray-500">Auto-submit saat waktu habis</p>
+                    <p className="font-semibold text-lg">Durasi: Dinamis berdasarkan jumlah soal</p>
+                    <p className="text-sm text-gray-500">1 soal = 1.18 menit • Auto-submit saat waktu habis</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="text-3xl">📝</span>
                   <div>
-                    <p className="font-semibold text-lg">Jumlah soal: 60 soal</p>
-                    <p className="text-sm text-gray-500">Semua submateri UTBK</p>
+                    <p className="font-semibold text-lg">Jumlah soal: Bervariasi per paket</p>
+                    <p className="text-sm text-gray-500">Biasanya 60-160 soal</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -299,6 +323,9 @@ export default function Tryout() {
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {tryoutPackages.map(function(pkg) {
+                    const calculatedDuration = calculateDuration(pkg.count)
+                    const durationDisplay = formatDuration(calculatedDuration)
+                    
                     return (
                       <button
                         key={pkg.number}
@@ -309,7 +336,7 @@ export default function Tryout() {
                         <div className="text-6xl mb-4">📦</div>
                         <h3 className="text-3xl font-bold mb-2">TO {pkg.number}</h3>
                         <p className="text-purple-100 text-lg">{pkg.count} soal</p>
-                        <p className="text-purple-200 text-sm mt-2">120 menit</p>
+                        <p className="text-purple-200 text-sm mt-2">⏱️ {durationDisplay}</p>
                       </button>
                     )
                   })}
@@ -330,147 +357,168 @@ export default function Tryout() {
     )
   }
 
-  // ========== STAGE 2: Tryout Test ==========
-  // ========== STAGE 2: Tryout Test ==========
-if (stage === 2) {
-  const currentQuestion = questions[currentIndex]
-  const answeredCount = Object.keys(answers).length
+  // ========================================
+  // STAGE 2: TRYOUT TEST (SIDEBAR LAYOUT)
+  // ========================================
+  if (stage === 2) {
+    const currentQuestion = questions[currentIndex]
+    const answeredCount = Object.keys(answers).length
 
-  return (
-    <div>
-      <Navbar />
-      <Timer
-        durationMinutes={120}
-        onTimeUp={function() { submitAnswers(true) }}
-        isActive={isActive}
-      />
+    return (
+      <div>
+        <Navbar />
+        <Timer
+          durationMinutes={durationMinutes} // Use dynamic duration
+          onTimeUp={function() { submitAnswers(true) }}
+          isActive={isActive}
+        />
 
-      <div className="min-h-screen bg-gray-50 pt-20 pb-8 px-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="min-h-screen bg-gray-50 pt-20 pb-8 px-4">
+          <div className="max-w-7xl mx-auto">
 
-          {/* Progress Bar - Full Width */}
-          <div className="bg-white rounded-lg p-4 mb-6 shadow">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium">
-                Tryout {selectedPackage} — Soal {currentIndex + 1}/{questions.length}
-              </span>
-              <span className="text-sm text-gray-600">
-                Terjawab: {answeredCount}/{questions.length}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-purple-600 h-2 rounded-full transition-all"
-                style={{ width: ((currentIndex + 1) / questions.length * 100) + '%' }}
-              />
-            </div>
-          </div>
-
-          {/* Main Content: Question (Left) + Navigation (Right) */}
-          <div className="grid lg:grid-cols-[1fr_320px] gap-6">
-            
-            {/* LEFT SIDE: Question Card */}
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-lg p-8">
-                <div className="mb-4">
-                  <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
-                    {currentQuestion?.submateri}
-                  </span>
-                </div>
-                <h2 className="text-xl font-medium mb-6 leading-relaxed whitespace-pre-line">
-                  {currentQuestion?.question_text}
-                </h2>
-                <div className="space-y-3">
-                  {['A', 'B', 'C', 'D', 'E'].map(function(opt) {
-                    const isSelected = answers[currentQuestion?.id]?.answer === opt
-                    return (
-                      <button
-                        key={opt}
-                        onClick={function() { handleAnswer(currentQuestion.id, opt) }}
-                        className={'w-full text-left p-4 rounded-xl border-2 transition-all ' + (isSelected ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300')}
-                      >
-                        <span className="font-bold mr-3">{opt}.</span>
-                        {currentQuestion?.[`option_${opt.toLowerCase()}`]}
-                      </button>
-                    )
-                  })}
-                </div>
+            {/* Progress Bar - Full Width */}
+            <div className="bg-white rounded-lg p-4 mb-6 shadow">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium">
+                  Tryout {selectedPackage} — Soal {currentIndex + 1}/{questions.length}
+                </span>
+                <span className="text-sm text-gray-600">
+                  Terjawab: {answeredCount}/{questions.length}
+                </span>
               </div>
-
-              {/* Navigation Buttons */}
-              <div className="flex justify-between items-center">
-                <button
-                  onClick={function() { setCurrentIndex(Math.max(0, currentIndex - 1)) }}
-                  disabled={currentIndex === 0}
-                  className="flex items-center gap-2 px-6 py-3 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                >
-                  <ChevronLeft size={20} />
-                  Sebelumnya
-                </button>
-                {currentIndex === questions.length - 1 ? (
-                  <button
-                    onClick={function() { submitAnswers(false) }}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
-                  >
-                    <Send size={20} />
-                    {loading ? 'Menyimpan...' : 'Submit'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={function() { setCurrentIndex(Math.min(questions.length - 1, currentIndex + 1)) }}
-                    className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                  >
-                    Selanjutnya
-                    <ChevronRight size={20} />
-                  </button>
-                )}
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-purple-600 h-2 rounded-full transition-all"
+                  style={{ width: ((currentIndex + 1) / questions.length * 100) + '%' }}
+                />
               </div>
             </div>
 
-            {/* RIGHT SIDE: Navigation Sidebar (Sticky) */}
-            <div className="lg:sticky lg:top-24 lg:self-start">
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="font-bold mb-4 text-gray-800">Navigasi Soal</h3>
-                <div className="grid grid-cols-5 gap-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
-                  {questions.map(function(q, idx) {
-                    const isAnswered = answers[q.id]
-                    const isCurrent = idx === currentIndex
-                    return (
-                      <button
-                        key={q.id}
-                        onClick={function() { setCurrentIndex(idx) }}
-                        className={'aspect-square rounded-lg font-bold text-xs transition-all ' + (isCurrent ? 'bg-purple-600 text-white ring-2 ring-purple-300' : isAnswered ? 'bg-green-100 text-green-800 border-2 border-green-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
-                      >
-                        {idx + 1}
-                      </button>
-                    )
-                  })}
-                </div>
+            {/* Main Content: Question (Left) + Navigation Sidebar (Right) */}
+            <div className="grid lg:grid-cols-[1fr_320px] gap-6">
+              
+              {/* ========== LEFT SIDE: Question Card ========== */}
+              <div className="space-y-6">
                 
-                {/* Legend */}
-                <div className="mt-4 pt-4 border-t space-y-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-green-100 border-2 border-green-500"></div>
-                    <span className="text-gray-600">Terjawab</span>
+                {/* Question Card */}
+                <div className="bg-white rounded-xl shadow-lg p-8">
+                  <div className="mb-4">
+                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
+                      {currentQuestion?.submateri}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-gray-100"></div>
-                    <span className="text-gray-600">Belum</span>
+                  <h2 className="text-xl font-medium mb-6 leading-relaxed whitespace-pre-line">
+                    {currentQuestion?.question_text}
+                  </h2>
+                  
+                  {/* Options */}
+                  <div className="space-y-3">
+                    {['A', 'B', 'C', 'D', 'E'].map(function(opt) {
+                      const isSelected = answers[currentQuestion?.id]?.answer === opt
+                      return (
+                        <button
+                          key={opt}
+                          onClick={function() { handleAnswer(currentQuestion.id, opt) }}
+                          className={'w-full text-left p-4 rounded-xl border-2 transition-all ' + (isSelected ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300')}
+                        >
+                          <span className="font-bold mr-3">{opt}.</span>
+                          {currentQuestion?.[`option_${opt.toLowerCase()}`]}
+                        </button>
+                      )
+                    })}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-purple-600"></div>
-                    <span className="text-gray-600">Sekarang</span>
+                </div>
+
+                {/* Navigation Buttons */}
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={function() { setCurrentIndex(Math.max(0, currentIndex - 1)) }}
+                    disabled={currentIndex === 0}
+                    className="flex items-center gap-2 px-6 py-3 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
+                  >
+                    <ChevronLeft size={20} />
+                    Sebelumnya
+                  </button>
+                  
+                  {currentIndex === questions.length - 1 ? (
+                    <button
+                      onClick={function() { submitAnswers(false) }}
+                      disabled={loading}
+                      className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium shadow-md hover:shadow-lg transition-all"
+                    >
+                      <Send size={20} />
+                      {loading ? 'Menyimpan...' : 'Submit Jawaban'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={function() { setCurrentIndex(Math.min(questions.length - 1, currentIndex + 1)) }}
+                      className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium shadow-md hover:shadow-lg transition-all"
+                    >
+                      Selanjutnya
+                      <ChevronRight size={20} />
+                    </button>
+                  )}
+                </div>
+
+              </div>
+
+              {/* ========== RIGHT SIDE: Navigation Sidebar (Sticky) ========== */}
+              <div className="lg:sticky lg:top-24 lg:self-start">
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <h3 className="font-bold mb-4 text-gray-800 text-lg">Navigasi Soal</h3>
+                  
+                  {/* Question Grid */}
+                  <div className="grid grid-cols-5 gap-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
+                    {questions.map(function(q, idx) {
+                      const isAnswered = answers[q.id]
+                      const isCurrent = idx === currentIndex
+                      
+                      let btnClass = 'aspect-square rounded-lg font-bold text-xs transition-all '
+                      
+                      if (isCurrent) {
+                        btnClass += 'bg-purple-600 text-white ring-2 ring-purple-300 shadow-md'
+                      } else if (isAnswered) {
+                        btnClass += 'bg-green-100 text-green-800 border-2 border-green-500'
+                      } else {
+                        btnClass += 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }
+                      
+                      return (
+                        <button
+                          key={q.id}
+                          onClick={function() { setCurrentIndex(idx) }}
+                          className={btnClass}
+                        >
+                          {idx + 1}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  
+                  {/* Legend */}
+                  <div className="mt-4 pt-4 border-t space-y-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-green-100 border-2 border-green-500"></div>
+                      <span className="text-gray-600">Terjawab</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-gray-100"></div>
+                      <span className="text-gray-600">Belum dijawab</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-purple-600"></div>
+                      <span className="text-gray-600">Soal sekarang</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
+
   return null
 }
