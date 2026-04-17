@@ -1,139 +1,62 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
-import { TrendingUp, TrendingDown, Target, Award } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Award, Target, BookOpen, BarChart3, Home } from 'lucide-react'
 
 const SUBMATERI_NAMES = {
-  PU: 'Penalaran Umum',
-  PPU: 'Pengetahuan & Pemahaman Umum',
-  PBM: 'Pemahaman Bacaan & Menulis',
-  PK: 'Pengetahuan Kuantitatif',
-  LBI: 'Literasi Bahasa Indonesia',
-  LBE: 'Literasi Bahasa Inggris',
-  PM: 'Penalaran Matematika'
+  'PU': 'Penalaran Umum',
+  'PPU': 'Pengetahuan & Pemahaman Umum',
+  'PBM': 'Pemahaman Bacaan & Menulis',
+  'PK': 'Pengetahuan Kuantitatif',
+  'LBI': 'Literasi Bahasa Indonesia',
+  'LBE': 'Literasi Bahasa Inggris',
+  'PM': 'Penalaran Matematika'
 }
 
-function WholeAnalysisContent() {
+export default function Analysis() {
   const { user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const currentTryout = parseInt(searchParams.get('tryout') || '3')
+  const isHighlight = searchParams.get('highlight') === 'true'
 
   const [loading, setLoading] = useState(true)
-  const [analysisData, setAnalysisData] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [analysis, setAnalysis] = useState(null)
 
   useEffect(function() {
     if (!user) {
       router.push('/login')
       return
     }
-    fetchAnalysis()
-  }, [user])
+    loadAnalysis()
+  }, [user, router])
 
-  async function fetchAnalysis() {
+  async function loadAnalysis() {
     setLoading(true)
 
-    const { data: profileData } = await supabase
+    const { data: profileData, error } = await supabase
       .from('student_profiles')
-      .select(`
-        *,
-        choice1:choice_1_major_id (
-          id, name, passing_grade,
-          universities (name, short_name)
-        ),
-        choice2:choice_2_major_id (
-          id, name, passing_grade,
-          universities (name, short_name)
-        ),
-        choice3:choice_3_major_id (
-          id, name, passing_grade,
-          universities (name, short_name)
-        )
-      `)
+      .select('*')
       .eq('user_id', user.id)
       .single()
 
-    setProfile(profileData)
-
-    const { data: sessions } = await supabase
-      .from('sessions')
-      .select(`
-        id,
-        tryout_number,
-        created_at,
-        user_answers (
-          is_correct,
-          questions (submateri)
-        )
-      `)
-      .eq('user_id', user.id)
-      .eq('session_type', 'tryout')
-      .eq('is_completed', true)
-      .order('tryout_number', { ascending: false })
-      .limit(3)
-
-    if (!sessions || sessions.length === 0) {
+    if (error || !profileData) {
+      console.error('Error loading profile:', error)
       setLoading(false)
       return
     }
 
-    const tryoutScores = sessions.reverse().map(function(s) {
-      const total = s.user_answers.length
-      const correct = s.user_answers.filter(function(a) { return a.is_correct }).length
-      const score = total > 0 ? Math.round((correct / total) * 100) : 0
+    setProfile(profileData)
 
-      const scoreBySubject = {}
-      s.user_answers.forEach(function(a) {
-        const sub = a.questions?.submateri
-        if (!sub) return
-        if (!scoreBySubject[sub]) {
-          scoreBySubject[sub] = { total: 0, correct: 0 }
-        }
-        scoreBySubject[sub].total++
-        if (a.is_correct) scoreBySubject[sub].correct++
-      })
-
-      return {
-        number: s.tryout_number,
-        date: new Date(s.created_at).toLocaleDateString('id-ID'),
-        overallScore: score,
-        scoreBySubject: scoreBySubject
-      }
-    })
-
-    const avgScore = Math.round(
-      tryoutScores.reduce(function(sum, t) { return sum + t.overallScore }, 0) / tryoutScores.length
-    )
-
-    const firstScore = tryoutScores[0]?.overallScore || 0
-    const lastScore = tryoutScores[tryoutScores.length - 1]?.overallScore || 0
-    const trend = lastScore - firstScore
-
-    const submateriAvg = {}
-    Object.keys(SUBMATERI_NAMES).forEach(function(sub) {
-      const scores = tryoutScores.map(function(t) {
-        const data = t.scoreBySubject[sub]
-        return data ? Math.round((data.correct / data.total) * 100) : 0
-      })
-      submateriAvg[sub] = scores.reduce(function(a, b) { return a + b }, 0) / scores.length
-    })
-
-    const sortedSub = Object.entries(submateriAvg).sort(function(a, b) { return b[1] - a[1] })
-    const bestSubmateri = sortedSub[0]
-    const worstSubmateri = sortedSub[sortedSub.length - 1]
-
-    setAnalysisData({
-      tryoutScores,
-      avgScore,
-      trend,
-      bestSubmateri,
-      worstSubmateri,
-      submateriAvg
-    })
+    // Analyze if we have 3+ tryouts
+    if (profileData.tryout_completed_count >= 3 && profileData.latest_tryout_scores) {
+      const { analyzeTryoutProgress } = await import('@/lib/utbkScoring')
+      const analysisResult = analyzeTryoutProgress(profileData.latest_tryout_scores)
+      setAnalysis(analysisResult)
+    }
 
     setLoading(false)
   }
@@ -144,196 +67,239 @@ function WholeAnalysisContent() {
     return (
       <div>
         <Navbar />
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!analysisData) {
-    return (
-      <div>
-        <Navbar />
-        <div className="min-h-screen bg-gray-50 p-8">
-          <div className="max-w-4xl mx-auto text-center py-16">
-            <p className="text-6xl mb-4">📊</p>
-            <h1 className="text-2xl font-bold mb-4">Belum Ada Data Tryout</h1>
-            <p className="text-gray-600 mb-6">Kerjakan minimal 3 tryout untuk melihat whole analysis</p>
-            <button
-              onClick={function() { router.push('/tryout') }}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Mulai Tryout
-            </button>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat analisis...</p>
           </div>
         </div>
       </div>
     )
   }
 
-  const { tryoutScores, avgScore, trend, bestSubmateri, worstSubmateri, submateriAvg } = analysisData
+  if (!profile || profile.tryout_completed_count < 3) {
+    return (
+      <div>
+        <Navbar />
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 p-8">
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-xl p-10 text-center">
+              <div className="text-6xl mb-4">📊</div>
+              <h1 className="text-3xl font-bold mb-4 text-gray-800">Analisis Kemampuan</h1>
+              <p className="text-gray-600 mb-6">
+                Kamu sudah menyelesaikan <strong>{profile?.tryout_completed_count || 0}</strong> dari <strong>3 tryout</strong> yang diperlukan untuk analisis.
+              </p>
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mb-6">
+                <p className="text-blue-800 text-sm">
+                  💡 Selesaikan minimal 3 tryout untuk mendapatkan analisis kemampuan yang komprehensif!
+                </p>
+              </div>
+              <button
+                onClick={function() { router.push('/tryout') }}
+                className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all"
+              >
+                Kerjakan Tryout
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Has analysis
+  const tryoutScores = profile.latest_tryout_scores || []
+  const trend = analysis?.trend || 'stable'
+  const TrendIcon = trend === 'improving' ? TrendingUp : trend === 'declining' ? TrendingDown : Minus
 
   return (
     <div>
       <Navbar />
-      <div className="min-h-screen bg-gray-50 p-8">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 p-8">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold mb-2">📊 Whole Analysis</h1>
-            <p className="text-gray-600">Analisis komprehensif {tryoutScores.length} tryout terakhir</p>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow p-6 text-center">
-              <p className="text-gray-500 mb-2">Rata-rata Skor</p>
-              <p className="text-5xl font-bold text-blue-600">{avgScore}%</p>
-            </div>
-            <div className="bg-white rounded-xl shadow p-6 text-center">
-              <p className="text-gray-500 mb-2">Tren</p>
-              <div className="flex items-center justify-center gap-2">
-                {trend >= 0 ? (
-                  <TrendingUp size={32} className="text-green-600" />
-                ) : (
-                  <TrendingDown size={32} className="text-red-600" />
-                )}
-                <p className={'text-5xl font-bold ' + (trend >= 0 ? 'text-green-600' : 'text-red-600')}>
-                  {trend > 0 ? '+' : ''}{trend}%
-                </p>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl shadow p-6 text-center">
-              <p className="text-gray-500 mb-2">Total Tryout</p>
-              <p className="text-5xl font-bold text-purple-600">{currentTryout}</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-6 mb-8">
-            <h2 className="text-xl font-bold mb-4">📈 Riwayat Tryout</h2>
-            <div className="space-y-3">
-              {tryoutScores.map(function(t) {
-                return (
-                  <div key={t.number} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-bold">Tryout #{t.number}</p>
-                      <p className="text-sm text-gray-500">{t.date}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-3xl font-bold text-blue-600">{t.overallScore}%</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <Award size={24} className="text-green-600" />
-                <h3 className="font-bold text-lg">Materi Terkuat</h3>
-              </div>
-              <p className="text-2xl font-bold text-green-700">{bestSubmateri[0]}</p>
-              <p className="text-gray-600">{SUBMATERI_NAMES[bestSubmateri[0]]}</p>
-              <p className="text-3xl font-bold text-green-600 mt-2">
-                {Math.round(bestSubmateri[1])}%
-              </p>
-            </div>
-
-            <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <Target size={24} className="text-red-600" />
-                <h3 className="font-bold text-lg">Perlu Fokus Lebih</h3>
-              </div>
-              <p className="text-2xl font-bold text-red-700">{worstSubmateri[0]}</p>
-              <p className="text-gray-600">{SUBMATERI_NAMES[worstSubmateri[0]]}</p>
-              <p className="text-3xl font-bold text-red-600 mt-2">
-                {Math.round(worstSubmateri[1])}%
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-6 mb-8">
-            <h2 className="text-xl font-bold mb-4">📚 Rata-rata per Submateri</h2>
-            <div className="space-y-4">
-              {Object.entries(submateriAvg).map(function([sub, avg]) {
-                const barColor = avg >= 70 ? 'bg-green-500' : avg >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                return (
-                  <div key={sub}>
-                    <div className="flex justify-between mb-1">
-                      <span className="font-medium">{sub} - {SUBMATERI_NAMES[sub]}</span>
-                      <span className="font-bold">{Math.round(avg)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div className={'h-3 rounded-full transition-all ' + barColor} style={{ width: avg + '%' }}></div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {profile && (profile.choice1 || profile.choice2 || profile.choice3) && (
-            <div className="bg-white rounded-xl shadow p-6 mb-8">
-              <h2 className="text-xl font-bold mb-4">🎯 Jarak ke Passing Grade</h2>
-              <div className="space-y-4">
-                {[profile.choice1, profile.choice2, profile.choice3].filter(Boolean).map(function(choice, idx) {
-                  if (!choice) return null
-                  const gap = avgScore - (choice.passing_grade || 0)
-                  return (
-                    <div key={idx} className="p-4 bg-gray-50 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-bold">{choice.name}</p>
-                          <p className="text-sm text-gray-500">
-                            {choice.universities?.name} • PG: {choice.passing_grade}%
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className={'text-2xl font-bold ' + (gap >= 0 ? 'text-green-600' : 'text-red-600')}>
-                            {gap > 0 ? '+' : ''}{gap.toFixed(1)}%
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {gap >= 0 ? '✅ Sudah capai!' : '⚠️ Masih kurang'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+          {/* Highlight Alert - Shown after completing 3rd tryout */}
+          {isHighlight && (
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl shadow-2xl p-8 mb-8 animate-pulse">
+              <div className="flex items-center gap-4">
+                <Award size={48} />
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">🎉 Selamat! Analisis Siap!</h2>
+                  <p className="text-green-100">
+                    Kamu telah menyelesaikan 3 tryout. Berikut adalah analisis kemampuan kamu!
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
-          <div className="flex gap-4 justify-center">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold mb-3 text-gray-800">📊 Analisis Kemampuan</h1>
+            <p className="text-gray-600">Berdasarkan 3 tryout terakhir kamu</p>
+          </div>
+
+          {/* Score Overview */}
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white rounded-xl shadow-lg p-6 text-center">
+              <Target size={32} className="mx-auto mb-3 text-indigo-600" />
+              <p className="text-sm text-gray-600 mb-2">Rata-rata Skor</p>
+              <p className="text-4xl font-bold text-indigo-600">{analysis.avgScore}</p>
+              <p className="text-xs text-gray-500 mt-1">Skala 0-1000</p>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6 text-center">
+              <TrendIcon size={32} className={'mx-auto mb-3 ' + (
+                trend === 'improving' ? 'text-green-600' :
+                trend === 'declining' ? 'text-red-600' : 'text-gray-600'
+              )} />
+              <p className="text-sm text-gray-600 mb-2">Tren Performa</p>
+              <p className={'text-2xl font-bold ' + (
+                trend === 'improving' ? 'text-green-600' :
+                trend === 'declining' ? 'text-red-600' : 'text-gray-600'
+              )}>
+                {trend === 'improving' ? '📈 Meningkat' : 
+                 trend === 'declining' ? '📉 Menurun' : '➡️ Stabil'}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {analysis.improvement > 0 ? '+' : ''}{analysis.improvement} poin
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6 text-center">
+              <BarChart3 size={32} className="mx-auto mb-3 text-purple-600" />
+              <p className="text-sm text-gray-600 mb-2">Konsistensi</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {analysis.consistency === 'consistent' ? '⭐ Konsisten' :
+                 analysis.consistency === 'moderate' ? '⚡ Cukup' : '⚠️ Fluktuatif'}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">Std Dev: {analysis.stdDev}</p>
+            </div>
+          </div>
+
+          {/* Score History */}
+          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">📈 Riwayat Skor</h2>
+            <div className="space-y-4">
+              {tryoutScores.map((tryout, idx) => (
+                <div key={idx} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex-shrink-0 w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
+                    <span className="text-2xl font-bold text-indigo-600">#{idx + 1}</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-800">Tryout {tryout.tryoutNumber}</p>
+                    <p className="text-sm text-gray-500">
+                      {new Date(tryout.date).toLocaleDateString('id-ID', { 
+                        day: 'numeric', 
+                        month: 'long', 
+                        year: 'numeric' 
+                      })}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold text-indigo-600">{tryout.normalizedScore}</p>
+                    <p className="text-sm text-gray-500">{tryout.percentage}% benar</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Submateri Analysis */}
+          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">📚 Analisis Per Submateri</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              {Object.keys(analysis.submateriAnalysis || {}).map(submateri => {
+                const data = analysis.submateriAnalysis[submateri]
+                const category = data.category
+                
+                let bgColor = 'bg-gray-100'
+                let textColor = 'text-gray-700'
+                let icon = '📊'
+                
+                if (category === 'strong') {
+                  bgColor = 'bg-green-100'
+                  textColor = 'text-green-800'
+                  icon = '💪'
+                } else if (category === 'good') {
+                  bgColor = 'bg-blue-100'
+                  textColor = 'text-blue-800'
+                  icon = '👍'
+                } else if (category === 'needs_improvement') {
+                  bgColor = 'bg-yellow-100'
+                  textColor = 'text-yellow-800'
+                  icon = '⚠️'
+                } else if (category === 'weak') {
+                  bgColor = 'bg-red-100'
+                  textColor = 'text-red-800'
+                  icon = '⚡'
+                }
+                
+                return (
+                  <div key={submateri} className={`${bgColor} p-4 rounded-lg`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className={`font-semibold ${textColor}`}>
+                        {icon} {SUBMATERI_NAMES[submateri] || submateri}
+                      </p>
+                      <span className={`text-2xl font-bold ${textColor}`}>
+                        {data.avgPercentage}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-white rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${
+                          category === 'strong' ? 'bg-green-600' :
+                          category === 'good' ? 'bg-blue-600' :
+                          category === 'needs_improvement' ? 'bg-yellow-600' : 'bg-red-600'
+                        }`}
+                        style={{ width: `${data.avgPercentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Recommendations */}
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white rounded-xl shadow-lg p-8 mb-8">
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
+              <BookOpen size={32} />
+              Rekomendasi Belajar
+            </h2>
+            <div className="space-y-4">
+              {(analysis.recommendations || []).map((rec, idx) => (
+                <div key={idx} className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4">
+                  <p className="font-medium">
+                    {rec.type === 'overall' && '🎯 '}
+                    {rec.type === 'trend' && '📈 '}
+                    {rec.type === 'focus' && '🔍 '}
+                    {rec.message}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="grid md:grid-cols-2 gap-4">
             <button
               onClick={function() { router.push('/tryout') }}
-              className="px-8 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700"
+              className="bg-indigo-600 text-white py-4 rounded-xl text-lg font-bold hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg"
             >
-              🎯 Tryout Lagi
+              🎯 Kerjakan Tryout Lagi
             </button>
             <button
-              onClick={function() { router.push('/growup') }}
-              className="px-8 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700"
+              onClick={function() { router.push('/') }}
+              className="bg-gray-600 text-white py-4 rounded-xl text-lg font-bold hover:bg-gray-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
             >
-              🚀 Grow Up (Fokus Materi Lemah)
+              <Home size={20} />
+              Kembali ke Dashboard
             </button>
           </div>
 
         </div>
       </div>
     </div>
-  )
-}
-
-export default function WholeAnalysis() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div>
-      </div>
-    }>
-      <WholeAnalysisContent />
-    </Suspense>
   )
 }
