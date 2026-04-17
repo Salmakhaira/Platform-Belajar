@@ -4,7 +4,7 @@ import { useAuth } from '@/components/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
-import { CheckCircle, XCircle, Clock, ArrowLeft, BookOpen, Lightbulb, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, ArrowLeft, BookOpen, Lightbulb, TrendingUp, TrendingDown, Minus, Award, BarChart3 } from 'lucide-react'
 
 const SUBMATERI_NAMES = {
   PU: 'Penalaran Umum',
@@ -26,6 +26,7 @@ export default function ReviewPage() {
   const [answers, setAnswers] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [tryoutCount, setTryoutCount] = useState(0)
 
   useEffect(() => {
     if (!user) {
@@ -38,6 +39,7 @@ export default function ReviewPage() {
   const fetchReviewData = async () => {
     setLoading(true)
 
+    // Fetch session
     const { data: sessionData, error: sessionError } = await supabase
       .from('sessions')
       .select('*')
@@ -47,12 +49,13 @@ export default function ReviewPage() {
 
     if (sessionError || !sessionData) {
       alert('Session tidak ditemukan!')
-      router.push('/latihan')
+      router.push('/')
       return
     }
 
     setSession(sessionData)
 
+    // Fetch answers with questions
     const { data: answersData, error: answersError } = await supabase
       .from('user_answers')
       .select(`
@@ -60,7 +63,6 @@ export default function ReviewPage() {
         questions (
           id,
           submateri,
-          packet,
           question_text,
           option_a,
           option_b,
@@ -69,7 +71,6 @@ export default function ReviewPage() {
           option_e,
           correct_answer,
           explanation,
-          tips_tricks,
           difficulty
         )
       `)
@@ -83,6 +84,18 @@ export default function ReviewPage() {
     }
 
     setAnswers(answersData || [])
+
+    // Fetch tryout completion count (for tryout sessions)
+    if (sessionData.session_type === 'tryout') {
+      const { data: profileData } = await supabase
+        .from('student_profiles')
+        .select('tryout_completed_count')
+        .eq('user_id', user.id)
+        .single()
+      
+      setTryoutCount(profileData?.tryout_completed_count || 0)
+    }
+
     setLoading(false)
   }
 
@@ -108,6 +121,10 @@ export default function ReviewPage() {
   const unansweredCount = answers.filter(a => !a.user_answer).length
   const scorePercentage = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
 
+  // Get UTBK scores from session if available
+  const hasUTBKScore = session?.score_detail?.normalizedScore !== undefined
+  const utbkScore = session?.score_detail || {}
+  
   // Calculate per-submateri breakdown
   const submateriScores = {}
   answers.forEach(a => {
@@ -115,11 +132,15 @@ export default function ReviewPage() {
     if (!sub) return
     
     if (!submateriScores[sub]) {
-      submateriScores[sub] = { total: 0, correct: 0 }
+      submateriScores[sub] = { total: 0, correct: 0, wrong: 0, unanswered: 0 }
     }
     submateriScores[sub].total++
     if (a.is_correct) {
       submateriScores[sub].correct++
+    } else if (a.user_answer) {
+      submateriScores[sub].wrong++
+    } else {
+      submateriScores[sub].unanswered++
     }
   })
 
@@ -144,6 +165,8 @@ export default function ReviewPage() {
       submateri: sub,
       name: SUBMATERI_NAMES[sub] || sub,
       correct: data.correct,
+      wrong: data.wrong,
+      unanswered: data.unanswered,
       total: data.total,
       percentage,
       status,
@@ -157,6 +180,8 @@ export default function ReviewPage() {
   const strongSubmateri = submateriAnalysis.filter(s => s.percentage >= 70)
 
   const isPretest = session?.session_type === 'pretest'
+  const isTryout = session?.session_type === 'tryout'
+  const isLatihan = session?.session_type === 'latihan'
 
   const filteredAnswers = answers.filter(a => {
     if (filter === 'correct') return a.is_correct
@@ -199,6 +224,7 @@ export default function ReviewPage() {
       <div className="min-h-screen bg-gray-50 py-8 px-4">
         <div className="max-w-4xl mx-auto">
 
+          {/* Header */}
           <div className="flex items-center gap-4 mb-6">
             <button
               onClick={() => router.back()}
@@ -209,54 +235,127 @@ export default function ReviewPage() {
             </button>
             <div>
               <h1 className="text-2xl font-bold">
-                {isPretest ? '📊 Hasil Initial Test' : 'Review Jawaban'}
+                {isPretest ? '📊 Hasil Initial Test' : 
+                 isTryout ? '🎯 Hasil Tryout' : 
+                 '📝 Review Jawaban'}
               </h1>
               <p className="text-gray-500 text-sm">
-                {session?.session_type === 'tryout' ? 'Tryout UTBK 2026' :
-                 session?.session_type === 'pretest' ? 'Initial Test - Diagnostic Assessment' :
+                {isTryout ? `Tryout ${session?.tryout_number || ''} - UTBK 2026` :
+                 isPretest ? 'Initial Test - Diagnostic Assessment' :
                  `Latihan ${session?.submateri} - ${SUBMATERI_NAMES[session?.submateri] || ''}`}
               </p>
             </div>
           </div>
 
-          {/* Score Summary */}
-          <div className={`rounded-2xl border-2 p-8 mb-8 ${getScoreBg(scorePercentage)}`}>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-              <div>
-                <p className={`text-5xl font-bold ${getScoreColor(scorePercentage)}`}>
-                  {scorePercentage}%
-                </p>
-                <p className="text-gray-600 mt-1">Skor Akhir</p>
+          {/* UTBK Score Card (For Tryout) */}
+          {isTryout && hasUTBKScore && (
+            <div className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-2xl shadow-2xl p-8 mb-8">
+              <div className="flex items-center gap-3 mb-6">
+                <Award size={40} />
+                <div>
+                  <h2 className="text-3xl font-bold">Skor UTBK</h2>
+                  <p className="text-purple-100">Sistem Penilaian: Benar +4 • Salah -1 • Kosong 0</p>
+                </div>
               </div>
-              <div>
-                <p className="text-5xl font-bold text-green-600">{correctCount}</p>
-                <p className="text-gray-600 mt-1">Benar</p>
+
+              <div className="grid md:grid-cols-2 gap-6 mb-6">
+                <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-6 text-center">
+                  <p className="text-purple-100 text-sm mb-2">Skor Normalized</p>
+                  <p className="text-6xl font-bold mb-2">{utbkScore.normalizedScore}</p>
+                  <p className="text-purple-200 text-sm">Skala 0-1000</p>
+                </div>
+                <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-6 text-center">
+                  <p className="text-purple-100 text-sm mb-2">Skor Mentah</p>
+                  <p className="text-6xl font-bold mb-2">{utbkScore.rawScore}</p>
+                  <p className="text-purple-200 text-sm">
+                    ({utbkScore.correct} × 4) - ({utbkScore.wrong} × 1)
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-5xl font-bold text-red-600">{wrongCount}</p>
-                <p className="text-gray-600 mt-1">Salah</p>
-              </div>
-              <div>
-                <p className="text-5xl font-bold text-gray-400">{unansweredCount}</p>
-                <p className="text-gray-600 mt-1">Tidak Dijawab</p>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
+                  <p className="text-4xl font-bold">{utbkScore.correct}</p>
+                  <p className="text-purple-100 text-sm mt-1">Benar</p>
+                  <p className="text-purple-200 text-xs">+{utbkScore.correct * 4} poin</p>
+                </div>
+                <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
+                  <p className="text-4xl font-bold">{utbkScore.wrong}</p>
+                  <p className="text-purple-100 text-sm mt-1">Salah</p>
+                  <p className="text-purple-200 text-xs">-{utbkScore.wrong} poin</p>
+                </div>
+                <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
+                  <p className="text-4xl font-bold">{utbkScore.unanswered}</p>
+                  <p className="text-purple-100 text-sm mt-1">Kosong</p>
+                  <p className="text-purple-200 text-xs">0 poin</p>
+                </div>
               </div>
             </div>
+          )}
 
-            <div className="text-center mt-6">
-              {scorePercentage >= 80 && (
-                <p className="text-green-700 font-bold text-lg">🎉 Excellent! Pertahankan terus!</p>
-              )}
-              {scorePercentage >= 60 && scorePercentage < 80 && (
-                <p className="text-yellow-700 font-bold text-lg">👍 Bagus! Masih bisa ditingkatkan lagi!</p>
-              )}
-              {scorePercentage < 60 && (
-                <p className="text-red-700 font-bold text-lg">💪 Jangan menyerah! Pelajari pembahasannya!</p>
-              )}
+          {/* Regular Score Summary (For Non-Tryout or if no UTBK score) */}
+          {(!isTryout || !hasUTBKScore) && (
+            <div className={`rounded-2xl border-2 p-8 mb-8 ${getScoreBg(scorePercentage)}`}>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                <div>
+                  <p className={`text-5xl font-bold ${getScoreColor(scorePercentage)}`}>
+                    {scorePercentage}%
+                  </p>
+                  <p className="text-gray-600 mt-1">Skor Akhir</p>
+                </div>
+                <div>
+                  <p className="text-5xl font-bold text-green-600">{correctCount}</p>
+                  <p className="text-gray-600 mt-1">Benar</p>
+                </div>
+                <div>
+                  <p className="text-5xl font-bold text-red-600">{wrongCount}</p>
+                  <p className="text-gray-600 mt-1">Salah</p>
+                </div>
+                <div>
+                  <p className="text-5xl font-bold text-gray-400">{unansweredCount}</p>
+                  <p className="text-gray-600 mt-1">Tidak Dijawab</p>
+                </div>
+              </div>
+
+              <div className="text-center mt-6">
+                {scorePercentage >= 80 && (
+                  <p className="text-green-700 font-bold text-lg">🎉 Excellent! Pertahankan terus!</p>
+                )}
+                {scorePercentage >= 60 && scorePercentage < 80 && (
+                  <p className="text-yellow-700 font-bold text-lg">👍 Bagus! Masih bisa ditingkatkan lagi!</p>
+                )}
+                {scorePercentage < 60 && (
+                  <p className="text-red-700 font-bold text-lg">💪 Jangan menyerah! Pelajari pembahasannya!</p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* PRETEST ANALYSIS - Only shown for pretest */}
-          {isPretest && submateriAnalysis.length > 0 && (
+          {/* Link to Analysis (if completed 3 tryouts) */}
+          {isTryout && tryoutCount >= 3 && (
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl shadow-lg p-6 mb-8">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <BarChart3 size={40} />
+                  <div>
+                    <h3 className="text-xl font-bold mb-1">🎉 Analisis Kemampuan Tersedia!</h3>
+                    <p className="text-green-100 text-sm">
+                      Kamu sudah menyelesaikan {tryoutCount} tryout. Lihat analisis lengkap!
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => router.push('/analysis')}
+                  className="bg-white text-green-600 px-6 py-3 rounded-lg font-bold hover:bg-green-50 transition-all"
+                >
+                  Lihat Analisis →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Per-Submateri Analysis */}
+          {(isPretest || isTryout) && submateriAnalysis.length > 0 && (
             <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border-2 border-blue-200">
               <div className="flex items-center gap-3 mb-6">
                 <div className="text-3xl">📊</div>
@@ -353,7 +452,7 @@ export default function ReviewPage() {
 
                 {weakSubmateri.length > 0 && (
                   <div className="mb-4">
-                    <p className="font-semibold text-red-700 mb-2">🎯 Prioritas Drilling:</p>
+                    <p className="font-semibold text-red-700 mb-2">🎯 Prioritas Belajar:</p>
                     <ul className="text-sm text-gray-700 space-y-1 ml-6">
                       {weakSubmateri.map(s => (
                         <li key={s.submateri}>
@@ -366,7 +465,7 @@ export default function ReviewPage() {
 
                 <div className="mt-6 pt-4 border-t border-blue-200">
                   <p className="text-sm text-blue-800 font-medium">
-                    💪 Langkah Selanjutnya: Mulai latihan di submateri yang lemah, kemudian tingkatkan yang sedang!
+                    💪 Langkah Selanjutnya: Fokus latihan di submateri yang lemah untuk hasil maksimal!
                   </p>
                 </div>
               </div>
@@ -423,7 +522,7 @@ export default function ReviewPage() {
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
-                      No. {idx + 1}
+                      No. {answers.indexOf(answer) + 1}
                     </span>
                     <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">
                       {answer.questions?.submateri}
@@ -456,7 +555,7 @@ export default function ReviewPage() {
                   </div>
                 </div>
 
-                <p className="text-gray-800 font-medium mb-4 leading-relaxed">
+                <p className="text-gray-800 font-medium mb-4 leading-relaxed whitespace-pre-line">
                   {answer.questions?.question_text}
                 </p>
 
@@ -479,27 +578,13 @@ export default function ReviewPage() {
                 </div>
 
                 {answer.questions?.explanation && (
-                  <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mb-3">
+                  <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
                     <div className="flex items-start gap-3">
                       <BookOpen className="text-blue-600 mt-1 shrink-0" size={20} />
                       <div className="flex-1">
                         <p className="font-semibold text-blue-800 mb-2">📖 Pembahasan:</p>
-                        <p className="text-gray-700 text-sm leading-relaxed">
+                        <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">
                           {answer.questions.explanation}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {answer.questions?.tips_tricks && (
-                  <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg">
-                    <div className="flex items-start gap-3">
-                      <Lightbulb className="text-yellow-600 mt-1 shrink-0" size={20} />
-                      <div className="flex-1">
-                        <p className="font-semibold text-yellow-800 mb-2">💡 Tips & Tricks:</p>
-                        <p className="text-gray-700 text-sm leading-relaxed">
-                          {answer.questions.tips_tricks}
                         </p>
                       </div>
                     </div>
@@ -511,20 +596,44 @@ export default function ReviewPage() {
 
           {/* Action Buttons */}
           <div className="flex gap-4 mt-8 justify-center flex-wrap">
-            <button
-              onClick={() => router.push('/latihan')}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-            >
-              📝 Latihan Lagi
-            </button>
-            {isPretest && (
+            {isLatihan && (
               <button
-                onClick={() => router.push('/tryout')}
-                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                onClick={() => router.push('/latihan')}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md hover:shadow-lg transition-all"
               >
-                🎯 Mulai Try Out
+                📝 Latihan Lagi
               </button>
             )}
+            {isTryout && (
+              <button
+                onClick={() => router.push('/tryout')}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                🎯 Tryout Lagi
+              </button>
+            )}
+            {isPretest && (
+              <>
+                <button
+                  onClick={() => router.push('/latihan')}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md hover:shadow-lg transition-all"
+                >
+                  📚 Mulai Latihan
+                </button>
+                <button
+                  onClick={() => router.push('/tryout')}
+                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium shadow-md hover:shadow-lg transition-all"
+                >
+                  🎯 Mulai Tryout
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => router.push('/')}
+              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium shadow-md hover:shadow-lg transition-all"
+            >
+              🏠 Dashboard
+            </button>
           </div>
 
         </div>
