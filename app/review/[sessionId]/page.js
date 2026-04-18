@@ -81,7 +81,7 @@ export default function ReviewPage() {
       if (qError) {
         console.error('Error fetching questions by tryout_number:', qError)
       } else {
-        questionsData?.forEach(q => { questionsMap[q.id] = q })
+        questionsData?.forEach(q => { questionsMap[String(q.id)] = q })
       }
 
     } else if (rawAnswers && rawAnswers.length > 0) {
@@ -96,7 +96,7 @@ export default function ReviewPage() {
 
     const mergedAnswers = (rawAnswers || []).map(a => ({
       ...a,
-      questions: questionsMap[a.question_id] || null
+      questions: questionsMap[String(a.question_id)] || null
     }))
 
     setAnswers(mergedAnswers)
@@ -307,7 +307,7 @@ export default function ReviewPage() {
                 </div>
               </div>
 
-                <div className="mt-6 bg-purple bg-opacity-10 rounded-lg p-4">
+                <div className="mt-6 bg-purple-700 bg-opacity-10 rounded-lg p-4">
                   <p className="text-sm text-purple-100">
                     💡 <strong>Sistem IRT:</strong> Soal sulit bernilai lebih tinggi. 
                     Jawaban salah tidak mengurangi poin!
