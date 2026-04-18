@@ -1,4 +1,6 @@
 'use client'
+export const dynamic = 'force-dynamic'  // <-- FIX: Add this line to disable prerendering
+
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthContext'
 import { supabase } from '@/lib/supabase'
