@@ -35,7 +35,7 @@ export default function ReviewPage() {
     }
     fetchReviewData()
   }, [user, sessionId])
-
+  
   const fetchReviewData = async () => {
     setLoading(true)
 
@@ -54,6 +54,8 @@ export default function ReviewPage() {
     }
 
     setSession(sessionData)
+
+    let mergedAnswers = []
 
     // Fetch answers with questions
     const { data: answersData, error: answersError } = await supabase
@@ -77,22 +79,47 @@ export default function ReviewPage() {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
 
-    if (answersError) {
-      console.error('Error fetching answers:', answersError)
-      setLoading(false)
-      return
+    if (!answersError && answersData && answersData.length > 0) {
+    mergedAnswers = answersData
+    } else {
+      // Fallback: 2 query terpisah lalu merge manual
+      console.log('Join gagal, fallback:', answersError?.message)
+
+      const { data: rawAnswers, error: rawError } = await supabase
+        .from('user_answers')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true })
+
+      if (!rawError && rawAnswers && rawAnswers.length > 0) {
+        const questionIds = rawAnswers.map(a => a.question_id).filter(Boolean)
+
+        const { data: questionsData } = await supabase
+          .from('questions')
+          .select('id, submateri, question_text, option_a, option_b, option_c, option_d, option_e, correct_answer, explanation, difficulty')
+          .in('id', questionIds)
+
+        const questionsMap = {}
+        questionsData?.forEach(q => { questionsMap[q.id] = q })
+
+        mergedAnswers = rawAnswers.map(a => ({
+          ...a,
+          questions: questionsMap[a.question_id] || null
+        }))
+      } else if (rawError) {
+        console.error('Error fetching answers (fallback):', rawError)
+      }
     }
+        
+    setAnswers(mergedAnswers)
 
-    setAnswers(answersData || [])
-
-    // Fetch tryout completion count (for tryout sessions)
     if (sessionData.session_type === 'tryout') {
       const { data: profileData } = await supabase
         .from('student_profiles')
         .select('tryout_completed_count')
         .eq('user_id', user.id)
         .single()
-      
+    
       setTryoutCount(profileData?.tryout_completed_count || 0)
     }
 
@@ -261,31 +288,31 @@ export default function ReviewPage() {
               <div className="grid md:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-6 text-center">
                   <p className="text-purple-100 text-sm mb-2">Skor Normalized</p>
-                  <p className="text-6xl font-bold mb-2">{utbkScore.normalizedScore}</p>
+                  <p className="text-6xl font-bold mb-2">{utbkScore.normalizedScore ?? 0}</p>
                   <p className="text-purple-200 text-sm">Skala 0-1000</p>
                 </div>
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-6 text-center">
                   <p className="text-purple-100 text-sm mb-2">Skor Mentah</p>
-                  <p className="text-6xl font-bold mb-2">{utbkScore.rawScore}</p>
+                  <p className="text-6xl font-bold mb-2">{utbkScore.rawScore ?? 0}</p>
                   <p className="text-purple-200 text-sm">
-                    dari {utbkScore.maxPossibleScore} maks
+                    dari {utbkScore.maxPossibleScore ?? 0} maks
                   </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
-                  <p className="text-4xl font-bold">{utbkScore.correct}</p>
+                  <p className="text-4xl font-bold">{utbkScore.correct ?? 0}</p>
                   <p className="text-purple-100 text-sm mt-1">Benar</p>
                   <p className="text-purple-200 text-xs">Dapat poin</p>
                 </div>
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
-                  <p className="text-4xl font-bold">{utbkScore.wrong}</p>
+                  <p className="text-4xl font-bold">{utbkScore.wrong ?? 0}</p>
                   <p className="text-purple-100 text-sm mt-1">Salah</p>
                   <p className="text-purple-200 text-xs">0 poin (tidak minus)</p>
                 </div>
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
-                  <p className="text-4xl font-bold">{utbkScore.unanswered}</p>
+                  <p className="text-4xl font-bold">{utbkScore.unanswered ?? 0}</p>
                   <p className="text-purple-100 text-sm mt-1">Kosong</p>
                   <p className="text-purple-200 text-xs">0 poin</p>
                 </div>
