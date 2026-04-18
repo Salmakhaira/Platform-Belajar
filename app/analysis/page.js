@@ -112,6 +112,11 @@ export default function Analysis() {
   const trend = analysis?.trend || 'stable'
   const TrendIcon = trend === 'improving' ? TrendingUp : trend === 'declining' ? TrendingDown : Minus
 
+  // Calculate average normalized score
+  const avgNormalizedScore = tryoutScores.length > 0
+    ? Math.round(tryoutScores.reduce((sum, t) => sum + (t.normalizedScore || 0), 0) / tryoutScores.length)
+    : 0
+
   return (
     <div>
       <Navbar />
@@ -143,9 +148,10 @@ export default function Analysis() {
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             <div className="bg-white rounded-xl shadow-lg p-6 text-center">
               <Target size={32} className="mx-auto mb-3 text-indigo-600" />
-              <p className="text-sm text-gray-600 mb-2">Rata-rata Skor</p>
-              <p className="text-4xl font-bold text-indigo-600">{analysis.avgScore}</p>
+              <p className="text-sm text-gray-600 mb-2">Rata-rata Skor UTBK</p>
+              <p className="text-5xl font-bold text-indigo-600">{avgNormalizedScore}</p>
               <p className="text-xs text-gray-500 mt-1">Skala 0-1000</p>
+              <p className="text-sm text-gray-600 mt-2">{analysis?.avgScore || 0}% benar</p>
             </div>
 
             <div className="bg-white rounded-xl shadow-lg p-6 text-center">
@@ -162,7 +168,7 @@ export default function Analysis() {
                  trend === 'declining' ? '📉 Menurun' : '➡️ Stabil'}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                {analysis.improvement > 0 ? '+' : ''}{analysis.improvement} poin
+                {analysis?.improvement > 0 ? '+' : ''}{analysis?.improvement || 0} poin
               </p>
             </div>
 
@@ -170,10 +176,10 @@ export default function Analysis() {
               <BarChart3 size={32} className="mx-auto mb-3 text-purple-600" />
               <p className="text-sm text-gray-600 mb-2">Konsistensi</p>
               <p className="text-2xl font-bold text-purple-600">
-                {analysis.consistency === 'consistent' ? '⭐ Konsisten' :
-                 analysis.consistency === 'moderate' ? '⚡ Cukup' : '⚠️ Fluktuatif'}
+                {analysis?.consistency === 'consistent' ? '⭐ Konsisten' :
+                 analysis?.consistency === 'moderate' ? '⚡ Cukup' : '⚠️ Fluktuatif'}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Std Dev: {analysis.stdDev}</p>
+              <p className="text-xs text-gray-500 mt-1">Std Dev: {analysis?.stdDev || 0}</p>
             </div>
           </div>
 
@@ -182,12 +188,14 @@ export default function Analysis() {
             <h2 className="text-2xl font-bold mb-6 text-gray-800">📈 Riwayat Skor</h2>
             <div className="space-y-4">
               {tryoutScores.map((tryout, idx) => (
-                <div key={idx} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                <div key={idx} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all">
                   <div className="flex-shrink-0 w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
                     <span className="text-2xl font-bold text-indigo-600">#{idx + 1}</span>
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold text-gray-800">Tryout {tryout.tryoutNumber}</p>
+                    <p className="font-semibold text-gray-800">
+                      Tryout {tryout.tryoutNumber || (idx + 1)}
+                    </p>
                     <p className="text-sm text-gray-500">
                       {new Date(tryout.date).toLocaleDateString('id-ID', { 
                         day: 'numeric', 
@@ -197,8 +205,11 @@ export default function Analysis() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold text-indigo-600">{tryout.normalizedScore}</p>
-                    <p className="text-sm text-gray-500">{tryout.percentage}% benar</p>
+                    <p className="text-4xl font-bold text-indigo-600">
+                      {tryout.normalizedScore || 0}
+                    </p>
+                    <p className="text-xs text-gray-500">Skala 0-1000</p>
+                    <p className="text-sm text-gray-600 mt-1">{tryout.percentage || 0}% benar</p>
                   </div>
                 </div>
               ))}
@@ -209,7 +220,7 @@ export default function Analysis() {
           <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
             <h2 className="text-2xl font-bold mb-6 text-gray-800">📚 Analisis Per Submateri</h2>
             <div className="grid md:grid-cols-2 gap-4">
-              {Object.keys(analysis.submateriAnalysis || {}).map(submateri => {
+              {Object.keys(analysis?.submateriAnalysis || {}).map(submateri => {
                 const data = analysis.submateriAnalysis[submateri]
                 const category = data.category
                 
@@ -268,7 +279,7 @@ export default function Analysis() {
               Rekomendasi Belajar
             </h2>
             <div className="space-y-4">
-              {(analysis.recommendations || []).map((rec, idx) => (
+              {(analysis?.recommendations || []).map((rec, idx) => (
                 <div key={idx} className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4">
                   <p className="font-medium">
                     {rec.type === 'overall' && '🎯 '}
@@ -280,6 +291,32 @@ export default function Analysis() {
               ))}
             </div>
           </div>
+
+          {/* Target Score Comparison */}
+          {profile.target_passing_grade && (
+            <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+              <h2 className="text-2xl font-bold mb-6 text-gray-800">🎯 Target vs Pencapaian</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="text-center p-6 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-gray-600 mb-2">Target Passing Grade</p>
+                  <p className="text-5xl font-bold text-blue-600">{profile.target_passing_grade}</p>
+                  <p className="text-xs text-gray-500 mt-1">Skala 0-1000</p>
+                </div>
+                <div className="text-center p-6 bg-indigo-50 rounded-lg">
+                  <p className="text-sm text-gray-600 mb-2">Rata-rata Skor Kamu</p>
+                  <p className="text-5xl font-bold text-indigo-600">{avgNormalizedScore}</p>
+                  <p className="text-xs text-gray-500 mt-1">Skala 0-1000</p>
+                  {avgNormalizedScore >= profile.target_passing_grade ? (
+                    <p className="text-sm text-green-600 font-semibold mt-2">✅ Target Tercapai!</p>
+                  ) : (
+                    <p className="text-sm text-orange-600 font-semibold mt-2">
+                      📊 Butuh +{profile.target_passing_grade - avgNormalizedScore} poin
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="grid md:grid-cols-2 gap-4">
