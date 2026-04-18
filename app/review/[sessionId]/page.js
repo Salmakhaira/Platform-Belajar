@@ -307,7 +307,7 @@ export default function ReviewPage() {
                 </div>
               </div>
 
-                <div className="mt-6 bg-white bg-opacity-10 rounded-lg p-4">
+                <div className="mt-6 bg-purple bg-opacity-10 rounded-lg p-4">
                   <p className="text-sm text-purple-100">
                     💡 <strong>Sistem IRT:</strong> Soal sulit bernilai lebih tinggi. 
                     Jawaban salah tidak mengurangi poin!
