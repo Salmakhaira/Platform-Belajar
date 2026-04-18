@@ -43,6 +43,7 @@ export default function TryoutPage() {
   const [durationMinutes, setDurationMinutes] = useState(120)
 
   const [availablePackages, setAvailablePackages] = useState([])
+  const [packageQuestionCounts, setPackageQuestionCounts] = useState({}) // FIX: Move state to top level
 
   useEffect(() => {
     if (!user) {
@@ -66,6 +67,18 @@ export default function TryoutPage() {
 
     const uniquePackages = [...new Set(data.map(q => q.tryout_number))].sort((a, b) => a - b)
     setAvailablePackages(uniquePackages)
+
+    // FIX: Fetch question counts for all packages at once
+    const counts = {}
+    for (const packageNum of uniquePackages) {
+      const { count } = await supabase
+        .from('questions')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_tryout', true)
+        .eq('tryout_number', packageNum)
+      counts[packageNum] = count || 0
+    }
+    setPackageQuestionCounts(counts)
   }
 
   async function startTryout(packageNum) {
@@ -192,129 +205,129 @@ export default function TryoutPage() {
   }
 
   async function submitAnswers(autoSubmit = false) {
-  if (!autoSubmit && !confirm('Yakin ingin submit jawaban?')) return
+    if (!autoSubmit && !confirm('Yakin ingin submit jawaban?')) return
 
-  if (autoSubmit) {
-    alert('Waktu habis! Jawaban akan otomatis terkirim.')
-  }
+    if (autoSubmit) {
+      alert('Waktu habis! Jawaban akan otomatis terkirim.')
+    }
 
-  setIsActive(false)
-  setLoading(true)
+    setIsActive(false)
+    setLoading(true)
 
-  console.log('=== DEBUG SUBMIT ===')
-  console.log('Total Questions:', questions.length)
-  console.log('Answers:', answers)
+    console.log('=== DEBUG SUBMIT ===')
+    console.log('Total Questions:', questions.length)
+    console.log('Answers:', answers)
 
-  try {
-    // Import IRT scoring function
-    const { calculateIRTScore, calculatePerSubmateri } = await import('@/lib/utbkScoring')
-    
-    // Calculate IRT-based scores
-    const scoreResult = calculateIRTScore(questions, answers)
-    const submateriScores = calculatePerSubmateri(questions, answers)
+    try {
+      // Import IRT scoring function
+      const { calculateIRTScore, calculatePerSubmateri } = await import('@/lib/utbkScoring')
+      
+      // Calculate IRT-based scores
+      const scoreResult = calculateIRTScore(questions, answers)
+      const submateriScores = calculatePerSubmateri(questions, answers)
 
-    console.log('IRT Score Result:', scoreResult)
-    console.log('Submateri Scores:', submateriScores)
+      console.log('IRT Score Result:', scoreResult)
+      console.log('Submateri Scores:', submateriScores)
 
-    // Update session with IRT scores
-    const { error: sessionError } = await supabase
-      .from('sessions')
-      .update({
-        end_time: new Date().toISOString(),
-        is_completed: true,
-        auto_submitted: autoSubmit,
-        final_score: scoreResult.normalizedScore,
-        score_detail: {
-          scoringMethod: 'IRT',
-          rawScore: scoreResult.rawScore,
-          maxPossibleScore: scoreResult.maxPossibleScore,
-          normalizedScore: scoreResult.normalizedScore,
-          correct: scoreResult.correct,
-          wrong: scoreResult.wrong,
-          unanswered: scoreResult.unanswered,
-          percentage: scoreResult.percentage,
-          submateriScores: submateriScores
+      // Update session with IRT scores
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .update({
+          end_time: new Date().toISOString(),
+          is_completed: true,
+          auto_submitted: autoSubmit,
+          final_score: scoreResult.normalizedScore,
+          score_detail: {
+            scoringMethod: 'IRT',
+            rawScore: scoreResult.rawScore,
+            maxPossibleScore: scoreResult.maxPossibleScore,
+            normalizedScore: scoreResult.normalizedScore,
+            correct: scoreResult.correct,
+            wrong: scoreResult.wrong,
+            unanswered: scoreResult.unanswered,
+            percentage: scoreResult.percentage,
+            submateriScores: submateriScores
+          }
+        })
+        .eq('id', sessionId)
+
+      if (sessionError) {
+        console.error('Session update error:', sessionError)
+        throw sessionError
+      }
+
+      console.log('Session updated successfully')
+
+      // Insert answers
+      const answersToInsert = questions.map(function(q) {
+        return {
+          session_id: sessionId,
+          question_id: q.id,
+          user_answer: answers[q.id]?.answer || null,
+          is_correct: answers[q.id]?.answer === q.correct_answer,
+          time_taken_seconds: answers[q.id]?.timeTaken || 0
         }
       })
-      .eq('id', sessionId)
 
-    if (sessionError) {
-      console.error('Session update error:', sessionError)
-      throw sessionError
-    }
+      const { error: answersError } = await supabase
+        .from('user_answers')
+        .insert(answersToInsert)
 
-    console.log('Session updated successfully')
-
-    // Insert answers
-    const answersToInsert = questions.map(function(q) {
-      return {
-        session_id: sessionId,
-        question_id: q.id,
-        user_answer: answers[q.id]?.answer || null,
-        is_correct: answers[q.id]?.answer === q.correct_answer,
-        time_taken_seconds: answers[q.id]?.timeTaken || 0
+      if (answersError) {
+        console.error('Answers insert error:', answersError)
+        throw answersError
       }
-    })
 
-    const { error: answersError } = await supabase
-      .from('user_answers')
-      .insert(answersToInsert)
+      console.log('Answers inserted successfully')
 
-    if (answersError) {
-      console.error('Answers insert error:', answersError)
-      throw answersError
-    }
+      // Update profile
+      const { data: profile } = await supabase
+        .from('student_profiles')
+        .select('tryout_completed_count, latest_tryout_scores, target_passing_grade')
+        .eq('user_id', user.id)
+        .single()
 
-    console.log('Answers inserted successfully')
-
-    // Update profile
-    const { data: profile } = await supabase
-      .from('student_profiles')
-      .select('tryout_completed_count, latest_tryout_scores, target_passing_grade')
-      .eq('user_id', user.id)
-      .single()
-
-    const newCount = (profile?.tryout_completed_count || 0) + 1
-    
-    let latestScores = profile?.latest_tryout_scores || []
-    latestScores.push({
-      sessionId: sessionId,
-      tryoutNumber: selectedPackage,
-      normalizedScore: scoreResult.normalizedScore,
-      percentage: scoreResult.percentage,
-      submateriScores: submateriScores,
-      date: new Date().toISOString()
-    })
-    if (latestScores.length > 3) {
-      latestScores = latestScores.slice(-3)
-    }
-
-    await supabase
-      .from('student_profiles')
-      .update({
-        current_score: scoreResult.normalizedScore,
-        tryout_completed_count: newCount,
-        latest_tryout_scores: latestScores
+      const newCount = (profile?.tryout_completed_count || 0) + 1
+      
+      let latestScores = profile?.latest_tryout_scores || []
+      latestScores.push({
+        sessionId: sessionId,
+        tryoutNumber: selectedPackage,
+        normalizedScore: scoreResult.normalizedScore,
+        percentage: scoreResult.percentage,
+        submateriScores: submateriScores,
+        date: new Date().toISOString()
       })
-      .eq('user_id', user.id)
+      if (latestScores.length > 3) {
+        latestScores = latestScores.slice(-3)
+      }
 
-    console.log('Profile updated successfully')
+      await supabase
+        .from('student_profiles')
+        .update({
+          current_score: scoreResult.normalizedScore,
+          tryout_completed_count: newCount,
+          latest_tryout_scores: latestScores
+        })
+        .eq('user_id', user.id)
 
-    setLoading(false)
+      console.log('Profile updated successfully')
 
-    // Redirect
-    if (newCount >= 3) {
-      router.push(`/analysis?highlight=true`)
-    } else {
-      router.push(`/review/${sessionId}`)
+      setLoading(false)
+
+      // Redirect
+      if (newCount >= 3) {
+        router.push(`/analysis?highlight=true`)
+      } else {
+        router.push(`/review/${sessionId}`)
+      }
+      
+    } catch (error) {
+      console.error('Submit error:', error)
+      alert('Error menyimpan jawaban: ' + error.message)
+      setLoading(false)
     }
-    
-  } catch (error) {
-    console.error('Submit error:', error)
-    alert('Error menyimpan jawaban: ' + error.message)
-    setLoading(false)
   }
-}
 
   if (!user) return null
 
@@ -346,21 +359,8 @@ export default function TryoutPage() {
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {availablePackages.map(packageNum => {
-                // Count questions for this package
-                const [questionCount, setQuestionCount] = useState(null)
-                
-                useEffect(() => {
-                  async function countQuestions() {
-                    const { count } = await supabase
-                      .from('questions')
-                      .select('*', { count: 'exact', head: true })
-                      .eq('is_tryout', true)
-                      .eq('tryout_number', packageNum)
-                    setQuestionCount(count)
-                  }
-                  countQuestions()
-                }, [packageNum])
-
+                // FIX: Get question count from state instead of using hooks in loop
+                const questionCount = packageQuestionCounts[packageNum] || 0
                 const duration = questionCount ? calculateDuration(questionCount) : 120
                 const durationText = formatDuration(duration)
 
