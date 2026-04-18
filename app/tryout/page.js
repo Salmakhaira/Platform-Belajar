@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import Timer from '@/components/Timer'
-import { CheckCircle, Circle } from 'lucide-react'
 
 const SUBMATERI_NAMES = {
   PU: 'Penalaran Umum',
@@ -43,7 +42,7 @@ export default function TryoutPage() {
   const [durationMinutes, setDurationMinutes] = useState(120)
 
   const [availablePackages, setAvailablePackages] = useState([])
-  const [packageQuestionCounts, setPackageQuestionCounts] = useState({}) // FIX: Move state to top level
+  const [packageQuestionCounts, setPackageQuestionCounts] = useState({})
 
   useEffect(() => {
     if (!user) {
@@ -54,38 +53,42 @@ export default function TryoutPage() {
   }, [user, router])
 
   async function fetchAvailablePackages() {
-    const { data, error } = await supabase
-      .from('questions')
-      .select('tryout_number')
-      .eq('is_tryout', true)
-      .order('tryout_number')
-
-    if (error) {
-      console.error('Error fetching packages:', error)
-      return
-    }
-
-    const uniquePackages = [...new Set(data.map(q => q.tryout_number))].sort((a, b) => a - b)
-    setAvailablePackages(uniquePackages)
-
-    // FIX: Fetch question counts for all packages at once
-    const counts = {}
-    for (const packageNum of uniquePackages) {
-      const { count } = await supabase
+    try {
+      const { data, error } = await supabase
         .from('questions')
-        .select('*', { count: 'exact', head: true })
+        .select('tryout_number')
         .eq('is_tryout', true)
-        .eq('tryout_number', packageNum)
-      counts[packageNum] = count || 0
+        .order('tryout_number')
+
+      if (error) {
+        console.error('Error fetching packages:', error)
+        return
+      }
+
+      const uniquePackages = [...new Set(data.map(q => q.tryout_number))].sort((a, b) => a - b)
+      setAvailablePackages(uniquePackages)
+
+      // Fetch question counts for all packages
+      const counts = {}
+      for (const packageNum of uniquePackages) {
+        const { count } = await supabase
+          .from('questions')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_tryout', true)
+          .eq('tryout_number', packageNum)
+        counts[packageNum] = count || 0
+      }
+      setPackageQuestionCounts(counts)
+    } catch (error) {
+      console.error('Error in fetchAvailablePackages:', error)
     }
-    setPackageQuestionCounts(counts)
   }
 
   async function startTryout(packageNum) {
     setLoading(true)
 
     console.log('=== START TRYOUT DEBUG ===')
-    console.log('User:', user)
+    console.log('User:', user?.id)
     console.log('Package:', packageNum)
 
     try {
@@ -98,11 +101,10 @@ export default function TryoutPage() {
         .order('id')
 
       console.log('Questions fetched:', questionsData?.length)
-      console.log('Questions error:', questionsError)
 
       if (questionsError) {
-        alert('Error memuat soal: ' + questionsError.message)
         console.error('Questions fetch error:', questionsError)
+        alert('Error memuat soal: ' + questionsError.message)
         setLoading(false)
         return
       }
@@ -115,21 +117,18 @@ export default function TryoutPage() {
 
       // Sort by submateri
       const sortOrder = ['PU', 'PPU', 'PBM', 'PK', 'LBI', 'LBE', 'PM']
-      const sortedQuestions = questionsData.sort(function(a, b) {
+      const sortedQuestions = questionsData.sort((a, b) => {
         return sortOrder.indexOf(a.submateri) - sortOrder.indexOf(b.submateri)
       })
 
-      // Calculate duration (1.18 minutes per question)
+      // Calculate duration
       const questionCount = sortedQuestions.length
       const calculatedDuration = calculateDuration(questionCount)
 
       console.log('Question count:', questionCount)
-      console.log('Duration:', calculatedDuration, 'minutes')
+      console.log('Calculated duration:', calculatedDuration, 'minutes')
 
-      // Create session with detailed error handling
-      console.log('Creating session...')
-      console.log('User ID:', user.id)
-
+      // Create session
       const sessionData = {
         user_id: user.id,
         session_type: 'tryout',
@@ -141,7 +140,7 @@ export default function TryoutPage() {
         final_score: 0
       }
 
-      console.log('Session data to insert:', sessionData)
+      console.log('Creating session with data:', sessionData)
 
       const { data: session, error: sessionError } = await supabase
         .from('sessions')
@@ -149,12 +148,9 @@ export default function TryoutPage() {
         .select()
         .single()
 
-      console.log('Session created:', session)
-      console.log('Session error:', sessionError)
-
       if (sessionError) {
-        console.error('FULL SESSION ERROR:', sessionError)
-        alert('Error membuat session: ' + sessionError.message + '\n\nDetail: ' + (sessionError.hint || 'No hint available'))
+        console.error('Session creation error:', sessionError)
+        alert('Error membuat session: ' + sessionError.message)
         setLoading(false)
         return
       }
@@ -179,10 +175,10 @@ export default function TryoutPage() {
       setStage(2)
       setLoading(false)
 
-      console.log('State updated, moving to stage 2')
+      console.log('Tryout started, moving to stage 2')
 
     } catch (error) {
-      console.error('CAUGHT ERROR in startTryout:', error)
+      console.error('Error in startTryout:', error)
       alert('Error: ' + error.message)
       setLoading(false)
     }
@@ -219,7 +215,7 @@ export default function TryoutPage() {
     console.log('Answers:', answers)
 
     try {
-      // Import IRT scoring function
+      // Import IRT scoring functions
       const { calculateIRTScore, calculatePerSubmateri } = await import('@/lib/utbkScoring')
       
       // Calculate IRT-based scores
@@ -228,6 +224,11 @@ export default function TryoutPage() {
 
       console.log('IRT Score Result:', scoreResult)
       console.log('Submateri Scores:', submateriScores)
+
+      // Validate score result
+      if (!scoreResult || scoreResult.normalizedScore === undefined) {
+        throw new Error('Invalid score calculation result')
+      }
 
       // Update session with IRT scores
       const { error: sessionError } = await supabase
@@ -259,15 +260,13 @@ export default function TryoutPage() {
       console.log('Session updated successfully')
 
       // Insert answers
-      const answersToInsert = questions.map(function(q) {
-        return {
-          session_id: sessionId,
-          question_id: q.id,
-          user_answer: answers[q.id]?.answer || null,
-          is_correct: answers[q.id]?.answer === q.correct_answer,
-          time_taken_seconds: answers[q.id]?.timeTaken || 0
-        }
-      })
+      const answersToInsert = questions.map(q => ({
+        session_id: sessionId,
+        question_id: q.id,
+        user_answer: answers[q.id]?.answer || null,
+        is_correct: answers[q.id]?.answer === q.correct_answer,
+        time_taken_seconds: answers[q.id]?.timeTaken || 0
+      }))
 
       const { error: answersError } = await supabase
         .from('user_answers')
@@ -283,7 +282,7 @@ export default function TryoutPage() {
       // Update profile
       const { data: profile } = await supabase
         .from('student_profiles')
-        .select('tryout_completed_count, latest_tryout_scores, target_passing_grade')
+        .select('tryout_completed_count, latest_tryout_scores')
         .eq('user_id', user.id)
         .single()
 
@@ -298,6 +297,8 @@ export default function TryoutPage() {
         submateriScores: submateriScores,
         date: new Date().toISOString()
       })
+      
+      // Keep only last 3 tryout scores
       if (latestScores.length > 3) {
         latestScores = latestScores.slice(-3)
       }
@@ -315,9 +316,9 @@ export default function TryoutPage() {
 
       setLoading(false)
 
-      // Redirect
+      // Redirect based on tryout count
       if (newCount >= 3) {
-        router.push(`/analysis?highlight=true`)
+        router.push('/analysis?highlight=true')
       } else {
         router.push(`/review/${sessionId}`)
       }
@@ -326,6 +327,7 @@ export default function TryoutPage() {
       console.error('Submit error:', error)
       alert('Error menyimpan jawaban: ' + error.message)
       setLoading(false)
+      setIsActive(true) // Re-enable timer if submit failed
     }
   }
 
@@ -359,7 +361,6 @@ export default function TryoutPage() {
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {availablePackages.map(packageNum => {
-                // FIX: Get question count from state instead of using hooks in loop
                 const questionCount = packageQuestionCounts[packageNum] || 0
                 const duration = questionCount ? calculateDuration(questionCount) : 120
                 const durationText = formatDuration(duration)
