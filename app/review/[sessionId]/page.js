@@ -91,7 +91,7 @@ export default function ReviewPage() {
         .select('id, submateri, question_text, option_a, option_b, option_c, option_d, option_e, correct_answer, explanation, difficulty')
         .in('id', questionIds)
 
-      questionsData?.forEach(q => { questionsMap[q.id] = q })
+      questionsData?.forEach(q => { questionsMap[String(q.id)] = q })
     }
 
     const mergedAnswers = (rawAnswers || []).map(a => ({
