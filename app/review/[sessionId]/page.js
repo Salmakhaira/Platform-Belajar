@@ -27,7 +27,6 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [tryoutCount, setTryoutCount] = useState(0)
-  const [debugInfo, setDebugInfo] = useState(null)
 
   useEffect(() => {
     if (!user) {
@@ -65,19 +64,12 @@ export default function ReviewPage() {
 
     if (rawError) {
       console.error('Error fetching answers:', rawError)
-      setDebugInfo({ step: 'user_answers fetch failed', error: rawError.message })
       setLoading(false)
       return
     }
 
-    // Debug: check question_id dari rawAnswers
-    const sampleIds = (rawAnswers || []).slice(0, 3).map(a => a.question_id)
-    const allNullIds = sampleIds.every(id => !id)
-
     // Fetch questions berdasarkan question_id dari user_answers
     let questionsMap = {}
-    let questionsError = null
-    let questionsFound = 0
 
     if (rawAnswers && rawAnswers.length > 0) {
       const questionIds = [...new Set(rawAnswers.map(a => a.question_id).filter(Boolean))]
@@ -85,29 +77,16 @@ export default function ReviewPage() {
       if (questionIds.length > 0) {
         const { data: questionsData, error: qError } = await supabase
           .from('questions')
-          .select('id, submateri, question_text, option_a, option_b, option_c, option_d, option_e, correct_answer, explanation, difficulty')
+          .select('id, submateri, question_text, option_a, option_b, option_c, option_d, option_e, correct_answer, explanation')
           .in('id', questionIds)
 
         if (qError) {
           console.error('Error fetching questions:', qError)
-          questionsError = qError.message
         } else {
           questionsData?.forEach(q => { questionsMap[String(q.id)] = q })
-          questionsFound = questionsData?.length || 0
         }
       }
     }
-
-    // Set debug info so we can diagnose the issue
-    setDebugInfo({
-      totalAnswers: rawAnswers?.length || 0,
-      sampleQuestionIds: sampleIds,
-      allIdsNull: allNullIds,
-      questionsFound,
-      questionsError,
-      sessionType: sessionData.session_type,
-      tryoutNumber: sessionData.tryout_number
-    })
 
     const mergedAnswers = (rawAnswers || []).map(a => ({
       ...a,
@@ -547,19 +526,6 @@ export default function ReviewPage() {
               </button>
             )}
           </div>
-
-          {/* DEBUG PANEL - Remove after fixing */}
-          {debugInfo && (
-            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 mb-6 font-mono text-xs">
-              <p className="font-bold text-yellow-800 mb-2">🔍 Debug Info (hapus setelah selesai):</p>
-              <p>Total Answers: <strong>{debugInfo.totalAnswers}</strong></p>
-              <p>Session Type: <strong>{debugInfo.sessionType}</strong> | Tryout Number: <strong>{String(debugInfo.tryoutNumber)}</strong></p>
-              <p>Sample question_id[0..2]: <strong>{JSON.stringify(debugInfo.sampleQuestionIds)}</strong></p>
-              <p>Semua question_id null?: <strong>{String(debugInfo.allIdsNull)}</strong></p>
-              <p>Questions ditemukan di DB: <strong>{debugInfo.questionsFound}</strong></p>
-              {debugInfo.questionsError && <p className="text-red-600">Questions Error: <strong>{debugInfo.questionsError}</strong></p>}
-            </div>
-          )}
 
           {/* Questions Review */}
           <div className="space-y-6">
