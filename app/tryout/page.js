@@ -192,196 +192,129 @@ export default function TryoutPage() {
   }
 
   async function submitAnswers(autoSubmit = false) {
-    if (!autoSubmit && !confirm('Yakin ingin submit jawaban?')) return
+  if (!autoSubmit && !confirm('Yakin ingin submit jawaban?')) return
 
-    if (autoSubmit) {
-      alert('Waktu habis! Jawaban akan otomatis terkirim.')
-    }
-
-    setIsActive(false)
-    setLoading(true)
-
-    console.log('=== DEBUG SUBMIT ===')
-    console.log('Total Questions:', questions.length)
-    console.log('Answers:', answers)
-    console.log('Session ID:', sessionId)
-
-    try {
-      // Calculate detailed scores using UTBK system
-      const totalQuestions = questions.length
-      const correctAnswers = questions.filter(q => answers[q.id]?.answer === q.correct_answer).length
-      const answeredCount = Object.keys(answers).length
-      const wrongAnswers = answeredCount - correctAnswers
-      const unansweredCount = totalQuestions - answeredCount
-      
-      console.log('Correct:', correctAnswers)
-      console.log('Wrong:', wrongAnswers)
-      console.log('Unanswered:', unansweredCount)
-
-      // Calculate UTBK score: Benar +4, Salah -1, Kosong 0
-      const rawScore = (correctAnswers * 4) - (wrongAnswers * 1)
-      const maxScore = totalQuestions * 4
-      const normalizedScore = Math.max(0, Math.round((rawScore / maxScore) * 1000))
-      const percentage = Math.round((correctAnswers / totalQuestions) * 100)
-
-      console.log('Raw Score:', rawScore)
-      console.log('Normalized Score:', normalizedScore)
-
-      // Calculate per-submateri scores
-      const submateriScores = {}
-      
-      questions.forEach(q => {
-        const submateri = q.submateri
-        if (!submateriScores[submateri]) {
-          submateriScores[submateri] = {
-            total: 0,
-            correct: 0,
-            wrong: 0,
-            unanswered: 0
-          }
-        }
-        
-        submateriScores[submateri].total++
-        
-        const userAnswer = answers[q.id]?.answer
-        if (!userAnswer) {
-          submateriScores[submateri].unanswered++
-        } else if (userAnswer === q.correct_answer) {
-          submateriScores[submateri].correct++
-        } else {
-          submateriScores[submateri].wrong++
-        }
-      })
-      
-      // Calculate scores for each submateri
-      Object.keys(submateriScores).forEach(submateri => {
-        const data = submateriScores[submateri]
-        const subRawScore = (data.correct * 4) - (data.wrong * 1)
-        const subMaxScore = data.total * 4
-        const subNormalizedScore = Math.max(0, Math.round((subRawScore / subMaxScore) * 1000))
-        const subPercentage = Math.round((data.correct / data.total) * 100)
-        
-        submateriScores[submateri].score = subNormalizedScore
-        submateriScores[submateri].rawScore = subRawScore
-        submateriScores[submateri].percentage = subPercentage
-      })
-
-      console.log('Submateri Scores:', submateriScores)
-
-      // Update session with detailed scores
-      const { error: sessionError } = await supabase
-        .from('sessions')
-        .update({
-          end_time: new Date().toISOString(),
-          is_completed: true,
-          auto_submitted: autoSubmit,
-          final_score: normalizedScore,
-          score_detail: {
-            rawScore: rawScore,
-            normalizedScore: normalizedScore,
-            correct: correctAnswers,
-            wrong: wrongAnswers,
-            unanswered: unansweredCount,
-            percentage: percentage,
-            submateriScores: submateriScores
-          }
-        })
-        .eq('id', sessionId)
-
-      if (sessionError) {
-        console.error('Session update error:', sessionError)
-        throw sessionError
-      }
-
-      console.log('Session updated successfully')
-
-      // Insert answers
-      const answersToInsert = questions.map(function(q) {
-        return {
-          session_id: sessionId,
-          question_id: q.id,
-          user_answer: answers[q.id]?.answer || null,
-          is_correct: answers[q.id]?.answer === q.correct_answer,
-          time_taken_seconds: answers[q.id]?.timeTaken || 0
-        }
-      })
-
-      console.log('Inserting answers:', answersToInsert.length)
-
-      const { error: answersError } = await supabase
-        .from('user_answers')
-        .insert(answersToInsert)
-
-      if (answersError) {
-        console.error('Answers insert error:', answersError)
-        throw answersError
-      }
-
-      console.log('Answers inserted successfully')
-
-      // Get current profile
-      const { data: profile, error: profileError } = await supabase
-        .from('student_profiles')
-        .select('tryout_completed_count, latest_tryout_scores, target_passing_grade')
-        .eq('user_id', user.id)
-        .single()
-
-      if (profileError) {
-        console.error('Profile fetch error:', profileError)
-      }
-
-      const newCount = (profile?.tryout_completed_count || 0) + 1
-      const targetGrade = profile?.target_passing_grade || 700
-      
-      // Keep latest 3 tryout scores
-      let latestScores = profile?.latest_tryout_scores || []
-      latestScores.push({
-        sessionId: sessionId,
-        tryoutNumber: selectedPackage,
-        normalizedScore: normalizedScore,
-        percentage: percentage,
-        submateriScores: submateriScores,
-        date: new Date().toISOString()
-      })
-      if (latestScores.length > 3) {
-        latestScores = latestScores.slice(-3)
-      }
-
-      // Update profile
-      const { error: profileUpdateError } = await supabase
-        .from('student_profiles')
-        .update({
-          current_score: normalizedScore,
-          tryout_completed_count: newCount,
-          latest_tryout_scores: latestScores,
-          needs_drilling: normalizedScore < targetGrade
-        })
-        .eq('user_id', user.id)
-
-      if (profileUpdateError) {
-        console.error('Profile update error:', profileUpdateError)
-      }
-
-      console.log('Profile updated successfully')
-      console.log('Tryout count:', newCount)
-
-      setLoading(false)
-
-      // Redirect based on tryout count
-      if (newCount >= 3) {
-        // After 3 tryouts, show analysis
-        router.push(`/analysis?highlight=true`)
-      } else {
-        // Show regular review
-        router.push(`/review/${sessionId}`)
-      }
-      
-    } catch (error) {
-      console.error('Submit error:', error)
-      alert('Error menyimpan jawaban: ' + error.message)
-      setLoading(false)
-    }
+  if (autoSubmit) {
+    alert('Waktu habis! Jawaban akan otomatis terkirim.')
   }
+
+  setIsActive(false)
+  setLoading(true)
+
+  console.log('=== DEBUG SUBMIT ===')
+  console.log('Total Questions:', questions.length)
+  console.log('Answers:', answers)
+
+  try {
+    // Import IRT scoring function
+    const { calculateIRTScore, calculatePerSubmateri } = await import('@/lib/utbkScoring')
+    
+    // Calculate IRT-based scores
+    const scoreResult = calculateIRTScore(questions, answers)
+    const submateriScores = calculatePerSubmateri(questions, answers)
+
+    console.log('IRT Score Result:', scoreResult)
+    console.log('Submateri Scores:', submateriScores)
+
+    // Update session with IRT scores
+    const { error: sessionError } = await supabase
+      .from('sessions')
+      .update({
+        end_time: new Date().toISOString(),
+        is_completed: true,
+        auto_submitted: autoSubmit,
+        final_score: scoreResult.normalizedScore,
+        score_detail: {
+          scoringMethod: 'IRT',
+          rawScore: scoreResult.rawScore,
+          maxPossibleScore: scoreResult.maxPossibleScore,
+          normalizedScore: scoreResult.normalizedScore,
+          correct: scoreResult.correct,
+          wrong: scoreResult.wrong,
+          unanswered: scoreResult.unanswered,
+          percentage: scoreResult.percentage,
+          submateriScores: submateriScores
+        }
+      })
+      .eq('id', sessionId)
+
+    if (sessionError) {
+      console.error('Session update error:', sessionError)
+      throw sessionError
+    }
+
+    console.log('Session updated successfully')
+
+    // Insert answers
+    const answersToInsert = questions.map(function(q) {
+      return {
+        session_id: sessionId,
+        question_id: q.id,
+        user_answer: answers[q.id]?.answer || null,
+        is_correct: answers[q.id]?.answer === q.correct_answer,
+        time_taken_seconds: answers[q.id]?.timeTaken || 0
+      }
+    })
+
+    const { error: answersError } = await supabase
+      .from('user_answers')
+      .insert(answersToInsert)
+
+    if (answersError) {
+      console.error('Answers insert error:', answersError)
+      throw answersError
+    }
+
+    console.log('Answers inserted successfully')
+
+    // Update profile
+    const { data: profile } = await supabase
+      .from('student_profiles')
+      .select('tryout_completed_count, latest_tryout_scores, target_passing_grade')
+      .eq('user_id', user.id)
+      .single()
+
+    const newCount = (profile?.tryout_completed_count || 0) + 1
+    
+    let latestScores = profile?.latest_tryout_scores || []
+    latestScores.push({
+      sessionId: sessionId,
+      tryoutNumber: selectedPackage,
+      normalizedScore: scoreResult.normalizedScore,
+      percentage: scoreResult.percentage,
+      submateriScores: submateriScores,
+      date: new Date().toISOString()
+    })
+    if (latestScores.length > 3) {
+      latestScores = latestScores.slice(-3)
+    }
+
+    await supabase
+      .from('student_profiles')
+      .update({
+        current_score: scoreResult.normalizedScore,
+        tryout_completed_count: newCount,
+        latest_tryout_scores: latestScores
+      })
+      .eq('user_id', user.id)
+
+    console.log('Profile updated successfully')
+
+    setLoading(false)
+
+    // Redirect
+    if (newCount >= 3) {
+      router.push(`/analysis?highlight=true`)
+    } else {
+      router.push(`/review/${sessionId}`)
+    }
+    
+  } catch (error) {
+    console.error('Submit error:', error)
+    alert('Error menyimpan jawaban: ' + error.message)
+    setLoading(false)
+  }
+}
 
   if (!user) return null
 
