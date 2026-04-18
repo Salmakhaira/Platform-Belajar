@@ -440,7 +440,7 @@ export default function TryoutPage() {
                   </p>
                 </div>
                 <Timer
-                  duration={durationMinutes}
+                  durationMinutes={durationMinutes}
                   isActive={isActive}
                   onTimeUp={() => submitAnswers(true)}
                 />
