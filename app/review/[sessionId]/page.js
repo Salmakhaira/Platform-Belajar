@@ -253,8 +253,8 @@ export default function ReviewPage() {
               <div className="flex items-center gap-3 mb-6">
                 <Award size={40} />
                 <div>
-                  <h2 className="text-3xl font-bold">Skor UTBK</h2>
-                  <p className="text-purple-100">Sistem Penilaian: Benar +4 • Salah -1 • Kosong 0</p>
+                  <h2 className="text-3xl font-bold">Skor UTBK (IRT)</h2>
+                  <p className="text-purple-100">Sistem Penilaian: Berdasarkan tingkat kesulitan soal</p>
                 </div>
               </div>
 
@@ -268,7 +268,7 @@ export default function ReviewPage() {
                   <p className="text-purple-100 text-sm mb-2">Skor Mentah</p>
                   <p className="text-6xl font-bold mb-2">{utbkScore.rawScore}</p>
                   <p className="text-purple-200 text-sm">
-                    ({utbkScore.correct} × 4) - ({utbkScore.wrong} × 1)
+                    dari {utbkScore.maxPossibleScore} maks
                   </p>
                 </div>
               </div>
@@ -277,12 +277,12 @@ export default function ReviewPage() {
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
                   <p className="text-4xl font-bold">{utbkScore.correct}</p>
                   <p className="text-purple-100 text-sm mt-1">Benar</p>
-                  <p className="text-purple-200 text-xs">+{utbkScore.correct * 4} poin</p>
+                  <p className="text-purple-200 text-xs">Dapat poin</p>
                 </div>
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
                   <p className="text-4xl font-bold">{utbkScore.wrong}</p>
                   <p className="text-purple-100 text-sm mt-1">Salah</p>
-                  <p className="text-purple-200 text-xs">-{utbkScore.wrong} poin</p>
+                  <p className="text-purple-200 text-xs">0 poin (tidak minus)</p>
                 </div>
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
                   <p className="text-4xl font-bold">{utbkScore.unanswered}</p>
@@ -290,9 +290,16 @@ export default function ReviewPage() {
                   <p className="text-purple-200 text-xs">0 poin</p>
                 </div>
               </div>
-            </div>
-          )}
 
+                <div className="mt-6 bg-white bg-opacity-10 rounded-lg p-4">
+                  <p className="text-sm text-purple-100">
+                    💡 <strong>Sistem IRT:</strong> Soal sulit bernilai lebih tinggi. 
+                    Jawaban salah tidak mengurangi poin!
+                  </p>
+                </div>
+              </div>
+            )}
+          
           {/* Regular Score Summary (For Non-Tryout or if no UTBK score) */}
           {(!isTryout || !hasUTBKScore) && (
             <div className={`rounded-2xl border-2 p-8 mb-8 ${getScoreBg(scorePercentage)}`}>
