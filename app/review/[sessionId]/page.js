@@ -230,6 +230,7 @@ export default function ReviewPage() {
   }
 
   const getOptionStyle = (answer, optionLetter) => {
+    if (!answer.questions) return 'bg-gray-50 border border-gray-200 text-gray-600'
     const isCorrect = answer.questions.correct_answer === optionLetter
     const isUserAnswer = answer.user_answer === optionLetter
 
