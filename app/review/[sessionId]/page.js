@@ -277,12 +277,12 @@ export default function ReviewPage() {
               <div className="grid md:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-6 text-center">
                   <p className="text-purple-100 text-sm mb-2">Skor Normalized</p>
-                  <p className="text-6xl font-bold mb-2">{utbkScore.normalizedScore ?? 0}</p>
+                  <p className="text-6xl font-bold mb-2 text-white">{utbkScore.normalizedScore ?? 0}</p>
                   <p className="text-purple-200 text-sm">Skala 0-1000</p>
                 </div>
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-6 text-center">
                   <p className="text-purple-100 text-sm mb-2">Skor Mentah</p>
-                  <p className="text-6xl font-bold mb-2">{utbkScore.rawScore ?? 0}</p>
+                  <p className="text-6xl font-bold mb-2 text-white">{utbkScore.rawScore ?? 0}</p>
                   <p className="text-purple-200 text-sm">
                     dari {utbkScore.maxPossibleScore ?? 0} maks
                   </p>
@@ -291,17 +291,17 @@ export default function ReviewPage() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
-                  <p className="text-4xl font-bold">{utbkScore.correct ?? 0}</p>
+                  <p className="text-4xl font-bold text-white">{utbkScore.correct ?? 0}</p>
                   <p className="text-purple-100 text-sm mt-1">Benar</p>
                   <p className="text-purple-200 text-xs">Dapat poin</p>
                 </div>
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
-                  <p className="text-4xl font-bold">{utbkScore.wrong ?? 0}</p>
+                  <p className="text-4xl font-bold text-white">{utbkScore.wrong ?? 0}</p>
                   <p className="text-purple-100 text-sm mt-1">Salah</p>
                   <p className="text-purple-200 text-xs">0 poin (tidak minus)</p>
                 </div>
                 <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 text-center">
-                  <p className="text-4xl font-bold">{utbkScore.unanswered ?? 0}</p>
+                  <p className="text-4xl font-bold text-white">{utbkScore.unanswered ?? 0}</p>
                   <p className="text-purple-100 text-sm mt-1">Kosong</p>
                   <p className="text-purple-200 text-xs">0 poin</p>
                 </div>
