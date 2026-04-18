@@ -68,30 +68,24 @@ export default function ReviewPage() {
       return
     }
 
-    // Fetch questions — pakai tryout_number jika tryout, pakai .in() jika latihan/pretest
+    // Fetch questions berdasarkan question_id dari user_answers (works for all session types)
     let questionsMap = {}
 
-    if (sessionData.tryout_number) {
-      const { data: questionsData, error: qError } = await supabase
-        .from('questions')
-        .select('id, submateri, question_text, option_a, option_b, option_c, option_d, option_e, correct_answer, explanation, difficulty')
-        .eq('is_tryout', true)
-        .eq('tryout_number', sessionData.tryout_number)
+    if (rawAnswers && rawAnswers.length > 0) {
+      const questionIds = [...new Set(rawAnswers.map(a => a.question_id).filter(Boolean))]
 
-      if (qError) {
-        console.error('Error fetching questions by tryout_number:', qError)
-      } else {
-        questionsData?.forEach(q => { questionsMap[String(q.id)] = q })
+      if (questionIds.length > 0) {
+        const { data: questionsData, error: qError } = await supabase
+          .from('questions')
+          .select('id, submateri, question_text, option_a, option_b, option_c, option_d, option_e, correct_answer, explanation, difficulty')
+          .in('id', questionIds)
+
+        if (qError) {
+          console.error('Error fetching questions:', qError)
+        } else {
+          questionsData?.forEach(q => { questionsMap[String(q.id)] = q })
+        }
       }
-
-    } else if (rawAnswers && rawAnswers.length > 0) {
-      const questionIds = rawAnswers.map(a => a.question_id).filter(Boolean)
-      const { data: questionsData } = await supabase
-        .from('questions')
-        .select('id, submateri, question_text, option_a, option_b, option_c, option_d, option_e, correct_answer, explanation, difficulty')
-        .in('id', questionIds)
-
-      questionsData?.forEach(q => { questionsMap[String(q.id)] = q })
     }
 
     const mergedAnswers = (rawAnswers || []).map(a => ({
